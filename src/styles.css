@@ -1,0 +1,532 @@
+/* Climate Risk Intelligence Dashboard - Custom CSS */
+
+/* Base Styles & Variables */
+:root {
+    --primary-blue: #1E40AF;
+    --primary-hover: #1E3A8A;
+    --secondary-blue: #2563EB;
+    --light-blue: #DBEAFE;
+    --danger: #EF4444;
+    --warning: #F59E0B;
+    --success: #10B981;
+    --gray-darker: #1F2937;
+    --gray-dark: #4B5563;
+    --gray-medium: #9CA3AF;
+    --gray-light: #E5E7EB;
+    --gray-lighter: #F3F4F6;
+    --white: #FFFFFF;
+  }
+  
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    color: var(--gray-darker);
+    background-color: var(--gray-lighter);
+  }
+  
+  /* Header */
+  header.climate-header {
+    background-image: linear-gradient(to right, var(--primary-blue), #2948B2);
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  }
+  
+  .climate-header h1 {
+    font-weight: 700;
+    letter-spacing: -0.025em;
+  }
+  
+  .climate-header button {
+    transition: background-color 0.2s ease-in-out;
+  }
+  
+  .climate-header button:hover {
+    background-color: var(--primary-hover);
+  }
+  
+  /* Navigation */
+  .climate-nav {
+    border-bottom: 1px solid var(--gray-light);
+  }
+  
+  .climate-nav button {
+    position: relative;
+    font-weight: 500;
+    transition: color 0.2s ease-in-out;
+  }
+  
+  .climate-nav button.active {
+    color: var(--secondary-blue);
+  }
+  
+  .climate-nav button.active::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 2px;
+    background-color: var(--secondary-blue);
+  }
+  
+  /* Dashboard Cards */
+  .dashboard-card {
+    background-color: var(--white);
+    border-radius: 0.5rem;
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+    transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+  }
+  
+  .dashboard-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  }
+  
+  /* Risk Score Cards */
+  .risk-score-card {
+    cursor: pointer;
+    transition: all 0.2s ease-in-out;
+  }
+  
+  .risk-score-card:hover {
+    background-color: var(--light-blue);
+    border-color: var(--secondary-blue);
+  }
+  
+  .risk-score-card.selected {
+    background-color: var(--light-blue);
+    border-color: var(--secondary-blue);
+  }
+  
+  .risk-score-progress {
+    height: 8px;
+    border-radius: 4px;
+    overflow: hidden;
+    background-color: var(--gray-light);
+  }
+  
+  .risk-score-progress-bar {
+    height: 100%;
+    border-radius: 4px;
+  }
+  
+  .risk-score-progress-bar.high {
+    background-color: var(--danger);
+  }
+  
+  .risk-score-progress-bar.medium {
+    background-color: var(--warning);
+  }
+  
+  .risk-score-progress-bar.low {
+    background-color: var(--success);
+  }
+  
+  /* Trend Badge */
+  .trend-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.25rem 0.75rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 500;
+  }
+  
+  .trend-badge.increasing {
+    background-color: rgba(239, 68, 68, 0.1);
+    color: #B91C1C;
+  }
+  
+  .trend-badge.decreasing {
+    background-color: rgba(16, 185, 129, 0.1);
+    color: #065F46;
+  }
+  
+  .trend-badge.stable {
+    background-color: rgba(245, 158, 11, 0.1);
+    color: #B45309;
+  }
+  
+  /* Charts */
+  .chart-container {
+    position: relative;
+    height: 300px;
+    width: 100%;
+  }
+  
+  /* Custom tooltip for charts */
+  .custom-tooltip {
+    background-color: var(--gray-darker);
+    border-radius: 0.375rem;
+    padding: 0.75rem;
+    color: var(--white);
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    border: none;
+  }
+  
+  .tooltip-label {
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+  }
+  
+  .tooltip-value {
+    color: var(--gray-light);
+  }
+  
+  /* Tables */
+  .data-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+  }
+  
+  .data-table th {
+    background-color: var(--gray-lighter);
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    color: var(--gray-dark);
+    padding: 0.75rem 1rem;
+    text-align: left;
+  }
+  
+  .data-table td {
+    padding: 1rem;
+    border-bottom: 1px solid var(--gray-light);
+  }
+  
+  .data-table tr:last-child td {
+    border-bottom: none;
+  }
+  
+  .data-table tr:hover {
+    background-color: var(--gray-lighter);
+  }
+  
+  /* Article cards */
+  .article-card {
+    border: 1px solid var(--gray-light);
+    border-radius: 0.375rem;
+    padding: 1rem;
+    transition: transform 0.2s ease-in-out, background-color 0.2s ease-in-out;
+  }
+  
+  .article-card:hover {
+    background-color: var(--gray-lighter);
+    transform: translateY(-2px);
+  }
+  
+  .article-title {
+    color: var(--secondary-blue);
+    font-weight: 500;
+    transition: color 0.2s ease-in-out;
+  }
+  
+  .article-card:hover .article-title {
+    color: var(--primary-blue);
+  }
+  
+  /* Category badges */
+  .category-badge {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 500;
+  }
+  
+  .category-badge.regulatory {
+    background-color: rgba(37, 99, 235, 0.1);
+    color: var(--secondary-blue);
+  }
+  
+  .category-badge.industry {
+    background-color: rgba(16, 185, 129, 0.1);
+    color: var(--success);
+  }
+  
+  .category-badge.news {
+    background-color: rgba(245, 158, 11, 0.1);
+    color: var(--warning);
+  }
+  
+  /* Domain cards */
+  .domain-card {
+    background-color: var(--white);
+    border-radius: 0.5rem;
+    overflow: hidden;
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+    margin-bottom: 1.5rem;
+  }
+  
+  .domain-card-header {
+    padding: 1rem 1.5rem;
+    background-image: linear-gradient(to right, var(--gray-lighter), #F9FAFB);
+    border-bottom: 1px solid var(--gray-light);
+  }
+  
+  .domain-content {
+    padding: 1.5rem;
+  }
+  
+  /* Risk factor items */
+  .risk-factor-item {
+    display: flex;
+    align-items: flex-start;
+    padding: 0.75rem;
+    border: 1px solid var(--gray-light);
+    border-radius: 0.375rem;
+    margin-bottom: 0.75rem;
+  }
+  
+  .risk-indicator {
+    width: 1rem;
+    height: 1rem;
+    border-radius: 9999px;
+    margin-top: 0.125rem;
+  }
+  
+  .risk-indicator.high {
+    background-color: var(--danger);
+  }
+  
+  .risk-indicator.medium {
+    background-color: var(--warning);
+  }
+  
+  .risk-indicator.low {
+    background-color: var(--success);
+  }
+  
+  /* Buttons */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 500;
+    padding: 0.5rem 1rem;
+    border-radius: 0.375rem;
+    transition: all 0.2s ease-in-out;
+  }
+  
+  .btn-primary {
+    background-color: var(--secondary-blue);
+    color: var(--white);
+  }
+  
+  .btn-primary:hover {
+    background-color: var(--primary-blue);
+  }
+  
+  .btn-secondary {
+    background-color: var(--gray-dark);
+    color: var(--white);
+  }
+  
+  .btn-secondary:hover {
+    background-color: var(--gray-darker);
+  }
+  
+  .btn-outlined {
+    background-color: transparent;
+    border: 1px solid var(--gray-light);
+  }
+  
+  .btn-outlined:hover {
+    background-color: var(--gray-lighter);
+  }
+  
+  /* Pagination */
+  .pagination {
+    display: flex;
+    align-items: center;
+  }
+  
+  .pagination-item {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.5rem;
+    height: 2.5rem;
+    border: 1px solid var(--gray-light);
+  }
+  
+  .pagination-item.active {
+    background-color: var(--secondary-blue);
+    color: var(--white);
+    border-color: var(--secondary-blue);
+  }
+  
+  .pagination-item:first-child {
+    border-top-left-radius: 0.375rem;
+    border-bottom-left-radius: 0.375rem;
+  }
+  
+  .pagination-item:last-child {
+    border-top-right-radius: 0.375rem;
+    border-bottom-right-radius: 0.375rem;
+  }
+  
+  /* Loading spinner */
+  .spinner {
+    border-radius: 50%;
+    width: 3rem;
+    height: 3rem;
+    border: 0.25rem solid rgba(37, 99, 235, 0.1);
+    border-top-color: var(--secondary-blue);
+    animation: spin 1s linear infinite;
+  }
+  
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+  
+  /* Footer */
+  .climate-footer {
+    background-color: var(--gray-darker);
+    color: var(--white);
+    padding: 1rem 0;
+  }
+  
+  .footer-link {
+    color: var(--gray-medium);
+    transition: color 0.2s ease-in-out;
+  }
+  
+  .footer-link:hover {
+    color: var(--white);
+  }
+  
+  /* Responsive adjustments */
+  @media (max-width: 768px) {
+    .climate-header h1 {
+      font-size: 1.25rem;
+    }
+    
+    .domain-card-grid {
+      grid-template-columns: 1fr;
+    }
+    
+    .chart-container {
+      height: 250px;
+    }
+  }
+  
+  /* Additional styling for reports tab */
+  .report-section {
+    margin-bottom: 2rem;
+  }
+  
+  .report-heading {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--gray-darker);
+    margin-bottom: 0.75rem;
+  }
+  
+  .report-card {
+    border: 1px solid;
+    border-radius: 0.5rem;
+    padding: 1rem;
+  }
+  
+  .report-card.property {
+    border-color: rgba(255, 128, 66, 0.3);
+    background-color: rgba(255, 128, 66, 0.05);
+  }
+  
+  .report-card.casualty {
+    border-color: rgba(0, 196, 159, 0.3);
+    background-color: rgba(0, 196, 159, 0.05);
+  }
+  
+  .report-card.health {
+    border-color: rgba(255, 187, 40, 0.3);
+    background-color: rgba(255, 187, 40, 0.05);
+  }
+  
+  .report-card.life {
+    border-color: rgba(0, 136, 254, 0.3);
+    background-color: rgba(0, 136, 254, 0.05);
+  }
+  
+  .report-card.reinsurance {
+    border-color: rgba(136, 132, 216, 0.3);
+    background-color: rgba(136, 132, 216, 0.05);
+  }
+  
+  .report-card-title {
+    font-weight: 500;
+    margin-bottom: 0.5rem;
+  }
+  
+  .report-card.property .report-card-title {
+    color: #C2410C;
+  }
+  
+  .report-card.casualty .report-card-title {
+    color: #065F46;
+  }
+  
+  .report-card.health .report-card-title {
+    color: #B45309;
+  }
+  
+  .report-card.life .report-card-title {
+    color: #1E40AF;
+  }
+  
+  .report-card.reinsurance .report-card-title {
+    color: #5B21B6;
+  }
+  
+  /* Animations */
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  
+  .fade-in {
+    animation: fadeIn 0.3s ease-in-out;
+  }
+  
+  @keyframes slideInUp {
+    from {
+      transform: translateY(20px);
+      opacity: 0;
+    }
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+  
+  .slide-in-up {
+    animation: slideInUp 0.3s ease-in-out;
+  }
+  
+  /* Apply custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  
+  ::-webkit-scrollbar-track {
+    background: var(--gray-lighter);
+  }
+  
+  ::-webkit-scrollbar-thumb {
+    background-color: var(--gray-medium);
+    border-radius: 3px;
+  }
+  
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: var(--gray-dark);
+  }
