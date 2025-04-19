@@ -20,6 +20,16 @@ import os
 from langchain_anthropic import ChatAnthropic
 from dotenv import load_dotenv
 import ast
+from langchain_core.messages import SystemMessage, HumanMessage
+from fastapi.middleware.cors import CORSMiddleware
+
+# … after: app = FastAPI(...)
+origins = [
+    "http://localhost:5173",
+    # you can add other origins here (or "*" for all)
+]
+
+
 
 load_dotenv()
 
@@ -95,10 +105,10 @@ app = FastAPI(
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, specify your frontend domain
+    allow_origins=origins,            # <-- your front‑end
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["*"],              # GET, POST, OPTIONS, etc.
+    allow_headers=["*"],              # Allow all headers
 )
 
 # MongoDB configuration
@@ -1829,6 +1839,43 @@ def generate_fallback_summaries(domain: str, limit: int = 3) -> List[Dict]:
     
     # Only return the requested number of summaries
     return domain_summaries
+
+class SummaryRequest(BaseModel):
+    article_id: str
+
+class SummaryResponse(BaseModel):
+    summary: str
+
+# 2️⃣ Add the summarization endpoint
+@app.post("/articles/summary", response_model=SummaryResponse)
+async def summarize_article(request: SummaryRequest):
+    # Lookup by ObjectId
+    article = await db.articles.find_one({"_id": ObjectId(request.article_id)})
+    if not article:
+        raise HTTPException(status_code=404, detail="Article not found")
+
+    system_prompt = """
+    You are an expert assistant that produces concise, informative summaries in valid Markdown.
+
+    Instructions:
+    - Begin with a level‑2 heading `## Summary`.
+    - Use bullet points (`-`) for key takeaways.
+    - Use **bold** to highlight critical facts.
+    - Keep the total length under ~200 words.
+    - Do not include any HTML—only Markdown syntax.
+    """
+
+    human_content = f"""Title: {article['title']} Content: {article['content']}"""
+
+
+    messages = [
+        SystemMessage(content=system_prompt),
+        HumanMessage(content=human_content)
+    ]
+
+    # Call the LLM
+    llm_response = llm.invoke(messages)
+    return {"summary": llm_response.content}
 
 @app.get("/reports", response_model=List[ReportModel])
 async def get_reports(skip: int = 0, limit: int = 10):
