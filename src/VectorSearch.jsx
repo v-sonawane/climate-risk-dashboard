@@ -10,6 +10,8 @@ const VectorSearch = () => {
   const [topicClusters, setTopicClusters] = useState([]);
   const [isClusterLoading, setIsClusterLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [trends, setTrends] = useState([]);
+
 
   const API_BASE_URL = 'http://localhost:8000';
 
@@ -86,6 +88,13 @@ const VectorSearch = () => {
     }
   };
 
+  useEffect(() => {
+    fetch(`${API_BASE_URL}/trends/emerging`)
+      .then(res => res.json())
+      .then(setTrends)
+      .catch(console.error);
+  }, []);
+  
   // Load topic clusters when switching to that tab
   useEffect(() => {
     if (activeTab === 'topics' && topicClusters.length === 0) {
@@ -300,9 +309,21 @@ const VectorSearch = () => {
                               <span className="text-sm font-medium text-blue-600">{summary.key_event}</span>
                               <span className="text-xs text-gray-500">{summary.source}</span>
                             </div>
-                            <p className="text-sm text-gray-600 mt-1 line-clamp-2">
-                              {summary.business_implications}
-                            </p>
+                            {typeof summary.business_implications === 'object' ? (
+  <div className="text-sm text-gray-600 mt-1 space-y-1">
+    {summary.business_implications.opportunities && (
+      <p><strong>Opportunities:</strong> {summary.business_implications.opportunities}</p>
+    )}
+    {summary.business_implications.challenges && (
+      <p><strong>Challenges:</strong> {summary.business_implications.challenges}</p>
+    )}
+  </div>
+) : (
+  <p className="text-sm text-gray-600 mt-1 line-clamp-2">
+    {summary.business_implications}
+  </p>
+)}
+
                           </div>
                         ))}
                       </div>
@@ -331,7 +352,23 @@ const VectorSearch = () => {
               <Activity className="w-8 h-8 text-blue-600" />
             </div>
             <h3 className="text-lg font-medium">Emerging Trends Analysis</h3>
-            <p className="mt-2 text-gray-600">This feature is coming soon. It will provide AI-powered emerging trend detection using vector embeddings.</p>
+            <div className="bg-white rounded-lg shadow p-4">
+  <h2 className="text-xl font-semibold mb-4">Emerging Climate Risk Trends</h2>
+  <div className="divide-y">
+    {trends.map((t, i) => (
+      <div key={i} className="py-2 flex justify-between items-center">
+        <span className="capitalize font-medium">{t.factor}</span>
+        <span
+          className={`text-sm font-semibold ${
+            t.change > 0 ? 'text-red-600' : t.change < 0 ? 'text-green-600' : 'text-gray-500'
+          }`}
+        >
+          {t.change > 0 ? '+' : ''}{t.change}%
+        </span>
+      </div>
+    ))}
+  </div>
+</div>
           </div>
         )}
       </div>

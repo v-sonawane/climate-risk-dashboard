@@ -2604,6 +2604,42 @@ async def generate_location(article_id: str):
     
     raise HTTPException(status_code=400, detail="Failed to geocode location")
 
+@app.get("/trends/emerging")
+async def get_emerging_trends():
+    # You might have article_risk_factors like:
+    # {"flood": 4, "wildfire": 9, "disclosure": 2, ...}
+    
+    recent_window = datetime.utcnow() - timedelta(days=30)
+    older_window = datetime.utcnow() - timedelta(days=90)
+
+    recent_counts = await db.articles.aggregate([
+        {"$match": {"date": {"$gte": recent_window}}},
+        {"$unwind": "$risk_factors"},
+        {"$group": {"_id": "$risk_factors", "count": {"$sum": 1}}}
+    ]).to_list(length=100)
+
+    older_counts = await db.articles.aggregate([
+        {"$match": {"date": {"$gte": older_window, "$lt": recent_window}}},
+        {"$unwind": "$risk_factors"},
+        {"$group": {"_id": "$risk_factors", "count": {"$sum": 1}}}
+    ]).to_list(length=100)
+
+    # Compute momentum = % increase
+    trend_map = {}
+    for t in recent_counts:
+        trend_map[t["_id"]] = {"recent": t["count"], "change": 0}
+
+    for t in older_counts:
+        if t["_id"] in trend_map:
+            prev = t["count"]
+            curr = trend_map[t["_id"]]["recent"]
+            change = ((curr - prev) / prev * 100) if prev else 0
+            trend_map[t["_id"]]["change"] = round(change, 1)
+
+    top = sorted(trend_map.items(), key=lambda kv: -kv[1]["change"])[:10]
+
+    return [{"factor": k, **v} for k, v in top]
+
 
 # Run the application
 if __name__ == "__main__":
