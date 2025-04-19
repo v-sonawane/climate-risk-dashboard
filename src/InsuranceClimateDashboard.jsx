@@ -11,6 +11,7 @@ import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm     from 'remark-gfm';
+import RiskMap from './RiskMap.jsx';
 // API base URL - change this to match your backend URL
 const API_BASE_URL = 'http://localhost:8000';
 
@@ -308,19 +309,20 @@ const InsuranceClimateDashboard = () => {
       {/* Tabs */}
       <nav className="bg-white shadow-sm">
         <div className="container mx-auto px-4 flex space-x-4">
-          {['dashboard','reports','articles','domains','search'].map(tab => (
-            <button
-              key={tab}
-              className={`px-4 py-3 font-medium ${
-                activeTab === tab
-                  ? 'text-blue-600 border-b-2 border-blue-600'
-                  : 'text-gray-600 hover:text-blue-500'
-              }`}
-              onClick={() => setActiveTab(tab)}
-            >
-              {tab === 'search' ? 'Semantic Search' : tab.charAt(0).toUpperCase() + tab.slice(1)}
-            </button>
-          ))}
+        {['dashboard','reports','articles','domains','search','map'].map(tab => (
+  <button
+    key={tab}
+    className={`px-4 py-3 font-medium ${
+      activeTab === tab
+        ? 'text-blue-600 border-b-2 border-blue-600'
+        : 'text-gray-600 hover:text-blue-500'
+    }`}
+    onClick={() => setActiveTab(tab)}
+  >
+    {tab === 'search' ? 'Semantic Search' : tab === 'map' ? 'Map' : tab.charAt(0).toUpperCase() + tab.slice(1)}
+  </button>
+))}
+
         </div>
       </nav>
 
@@ -664,8 +666,16 @@ const InsuranceClimateDashboard = () => {
                 <VectorSearch />
               </div>
             )}
+            {activeTab === 'map' && (
+              <div className="bg-white rounded-lg shadow p-4">
+                <h2 className="text-xl font-semibold mb-4">Live Risk Map</h2>
+                <RiskMap />
+              </div>
+            )}
+
           </>
         )}
+
       </main>
 
       <footer className="bg-gray-800 text-white py-4">

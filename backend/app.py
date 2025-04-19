@@ -2563,6 +2563,48 @@ async def shutdown_event():
     client.close()
     logger.info("API shutdown complete")
 
+@app.get("/hazards/active")
+async def get_active_hazards():
+    res = await httpx.get("https://api.weather.gov/alerts/active")
+    geojson = res.json()
+    return [
+        {
+            "id": f["id"],
+            "title": f["properties"]["headline"],
+            "severity": f["properties"]["severity"],
+            "area": f["geometry"]
+        }
+        for f in geojson.get("features", []) if f.get("geometry")
+    ]
+@app.post("/articles/enrich-geo")
+async def enrich_geo_articles():
+    from .geotag import enrich_all_articles
+    await enrich_all_articles()
+    return {"status": "ok", "message": "Geolocation enrichment started"}
+
+@app.post("/articles/{article_id}/generate-location")
+async def generate_location(article_id: str):
+    article = await db["articles"].find_one({"_id": article_id})
+    if not article:
+        raise HTTPException(status_code=404, detail="Article not found")
+    from .geotag import extract_location_from_article, geocode_location
+    location_name = extract_location_from_article(article["title"], article["summary"])
+    geodata = geocode_location(location_name)
+
+    if geodata:
+        await db["articles"].update_one(
+            {"_id": article_id},
+            {"$set": {
+                "lat": geodata["lat"],
+                "lng": geodata["lng"],
+                "location_name": location_name
+            }}
+        )
+        return {"status": "success", "location": location_name}
+    
+    raise HTTPException(status_code=400, detail="Failed to geocode location")
+
+
 # Run the application
 if __name__ == "__main__":
     import uvicorn
