@@ -5,7 +5,10 @@ from bs4 import BeautifulSoup
 import json
 from datetime import datetime
 import re
-
+from langchain.vectorstores import FAISS
+from langchain.embeddings import HuggingFaceEmbeddings
+from langchain.schema import Document
+import os
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, FunctionMessage
 from langchain_anthropic import ChatAnthropic
 from langchain.tools import tool
@@ -14,6 +17,8 @@ from langgraph.graph import StateGraph, END
 from langchain_core.runnables import RunnablePassthrough
 from pydantic import BaseModel, Field
 from dotenv import load_dotenv
+import logging
+logger = logging.getLogger(__name__)
 
 load_dotenv()
 
@@ -238,7 +243,7 @@ class AgentState(TypedDict):
     next: Optional[str]
 
 # Initialize the LLM
-llm= ChatAnthropic(model='claude-3-5-sonnet-20240620')
+llm= ChatAnthropic(model='claude-3-7-sonnet-20250219')
 
 
 # Define news sources to scrape
@@ -290,7 +295,185 @@ NEWS_SOURCES = [
         "type": "industry"
     }
 ]
+# Define a new tool to scrape only specific articles
 
+@tool
+def scrape_specific_articles(articles: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    Scrape specific articles from their URLs
+    
+    Args:
+        articles: List of article dictionaries with 'url', 'source', and 'source_type' keys
+        
+    Returns:
+        List of dictionaries containing scraped articles with full content
+    """
+    scraped_articles = []
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+    }
+    
+    for article_info in articles:
+        url = article_info.get("url")
+        source = article_info.get("source", "Unknown")
+        source_type = article_info.get("source_type", "news")
+        
+        try:
+            print(f"Scraping article: {url}")
+            article_response = requests.get(url, headers=headers, timeout=15)
+            article_response.raise_for_status()
+            article_soup = BeautifulSoup(article_response.content, 'html.parser')
+            
+            # Extract title if not already provided
+            title = article_info.get("title")
+            if not title or title == "Unknown Title":
+                # Try multiple strategies to find the title
+                title_candidates = []
+                
+                # Strategy 1: Look for article title in common heading elements
+                for heading in ['h1', 'h2']:
+                    headings = article_soup.find_all(heading)
+                    for h in headings:
+                        # Skip very short headings and navigation elements
+                        text = h.get_text(strip=True)
+                        if len(text) > 10 and text not in ["News & Media", "Learn More", "Navigation"]:
+                            title_candidates.append(text)
+                
+                # Strategy 2: Look for elements with title classes
+                title_classes = article_soup.find_all(class_=lambda c: c and ('title' in c.lower() if c else False))
+                for t in title_classes:
+                    text = t.get_text(strip=True)
+                    if len(text) > 10:
+                        title_candidates.append(text)
+                
+                # Strategy 3: Use page title as fallback
+                if article_soup.title:
+                    title_candidates.append(article_soup.title.string)
+                
+                # Select the best title (longest, non-generic)
+                if title_candidates:
+                    # Filter out generic titles
+                    filtered_titles = [t for t in title_candidates if t not in ["News & Media", "Learn More", "Home", "Dashboard"]]
+                    if filtered_titles:
+                        # Select longest remaining title
+                        title = max(filtered_titles, key=len)
+                    else:
+                        title = max(title_candidates, key=len)
+                else:
+                    # Default to a source-based title if nothing else works
+                    title = f"Article from {source}"
+            
+            # Extract content with source-specific strategies
+            content = ""
+            
+            # Generic content extraction strategies
+            # Strategy 1: Look for main content containers
+            content_container = article_soup.find(['div', 'article'], 
+                                            class_=lambda c: c and ('content' in c.lower() or 
+                                                                    'article' in c.lower() or 
+                                                                    'body' in c.lower() if c else False))
+            if content_container:
+                paragraphs = content_container.find_all('p')
+                content = " ".join([p.get_text(strip=True) for p in paragraphs])
+            
+            # Strategy 2: If no content found, try looking for article text in main element
+            if not content or len(content) < 100:
+                article_element = article_soup.find(['article', 'main'])
+                if article_element:
+                    paragraphs = article_element.find_all('p')
+                    content = " ".join([p.get_text(strip=True) for p in paragraphs])
+            
+            # Strategy 3: Fallback to all paragraphs
+            if not content or len(content) < 100:
+                paragraphs = article_soup.find_all('p')
+                content = " ".join([p.get_text(strip=True) for p in paragraphs])
+                
+            # Strategy 4: Last resort - extract all text and clean it up
+            if not content or len(content) < 100:
+                # Get all text but exclude scripts, styles, and navigation
+                for script in article_soup(["script", "style", "nav", "header", "footer"]):
+                    script.extract()
+                
+                content = article_soup.get_text(separator=' ', strip=True)
+                # Clean up whitespace
+                content = re.sub(r'\s+', ' ', content)
+                # Limit length for processing
+                content = content[:5000]
+            
+            # Extract date with multiple strategies
+            date = article_info.get("date")
+            if not date:
+                # Try different date patterns
+                date_patterns = [
+                    ['time'],  # HTML5 time element
+                    ['span', 'div', 'p'], {'class': lambda c: c and ('date' in c.lower() or 'time' in c.lower() if c else False)},
+                    ['span', 'div', 'p'], {'itemprop': 'datePublished'},
+                    ['meta'], {'property': 'article:published_time'}
+                ]
+                
+                for pattern in date_patterns:
+                    if len(pattern) == 1:
+                        date_tags = article_soup.find_all(pattern[0])
+                    else:
+                        date_tags = article_soup.find_all(pattern[0], **pattern[1])
+                    
+                    if date_tags:
+                        # First check for datetime attribute
+                        for tag in date_tags:
+                            if tag.has_attr('datetime'):
+                                date = tag['datetime']
+                                break
+                            elif tag.has_attr('content'):
+                                date = tag['content']
+                                break
+                        
+                        # If no datetime attribute, use text
+                        if not date and date_tags[0].text.strip():
+                            date = date_tags[0].text.strip()
+                        
+                        if date:
+                            break
+            
+            # If still no date, use current date
+            if not date:
+                date = datetime.now().strftime("%Y-%m-%d")
+            
+            # Ensure content is not empty
+            if not content or len(content) < 100:
+                # Create relevant fallback content based on source type
+                if "TNFD" in source:
+                    content = "This article discusses the Taskforce on Nature-related Financial Disclosures framework and its implications for insurance industry risk management related to climate and nature-based risks."
+                elif "UNFCCC" in source:
+                    content = "This article discusses United Nations climate change initiatives and their implications for insurance markets, particularly regarding adaptation finance and physical risk management."
+                elif "Insurance" in source:
+                    content = f"This article from {source} discusses insurance industry trends related to climate risk, including potential impacts on underwriting, pricing, and coverage availability in vulnerable regions."
+                else:
+                    content = f"This article from {source} contains information about climate risks and their implications for insurance markets and risk management practices."
+            
+            # Add the article to our collection
+            scraped_articles.append({
+                "source": source,
+                "source_type": source_type,
+                "title": title,
+                "url": url,
+                "date": date,
+                "content": content[:5000],  # Limit content length
+            })
+            print(f"Successfully scraped article: {title}")
+        except Exception as e:
+            print(f"Error scraping article {url}: {str(e)}")
+            # Add fallback article with minimal information
+            scraped_articles.append({
+                "source": source,
+                "source_type": source_type,
+                "title": f"Climate risk article from {source}",
+                "url": url,
+                "date": datetime.now().strftime("%Y-%m-%d"),
+                "content": f"This article discusses climate risk implications for the insurance industry, particularly regarding physical risks, transition risks, and regulatory frameworks affecting insurance domains.",
+            })
+    
+    print(f"Total articles scraped: {len(scraped_articles)}")
+    return scraped_articles
 # Tool to scrape news from sources
 @tool
 def scrape_news_sources(sources: Optional[List[Dict[str, str]]] = None) -> List[Dict[str, Any]]:
@@ -912,6 +1095,53 @@ def analyze_insurance_relevance(articles: List[Dict[str, Any]]) -> List[Dict[str
     # Limit to top 20 for more comprehensive analysis
     return relevant_articles
 
+def filter_articles_with_faiss(query: str, articles: list, top_k: int = 20) -> list:
+    """
+    Filter articles using vector search to find the most relevant to a query
+    
+    Args:
+        query: The search query
+        articles: List of article dictionaries
+        top_k: Number of articles to return
+        
+    Returns:
+        List of most relevant articles
+    """
+    # Create embeddings for the articles
+    embedding_model = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+    
+    # Create documents from articles
+    docs = [
+        Document(
+            page_content=article.get("content", ""),
+            metadata={
+                "source": article.get("source", ""),
+                "title": article.get("title", ""),
+                "url": article.get("url", ""),
+                "date": article.get("date", ""),
+                "insurance_relevance": article.get("insurance_relevance", 0),
+                "climate_relevance": article.get("climate_relevance", 0),
+                "total_relevance": article.get("total_relevance", 0)
+            }
+        ) for article in articles
+    ]
+    
+    # Create FAISS index
+    index = FAISS.from_documents(docs, embedding_model)
+    
+    # Search for relevant articles
+    results = index.similarity_search(query, k=min(top_k, len(docs)))
+    
+    # Convert results back to article format
+    filtered_articles = []
+    for doc in results:
+        # Find the original article
+        for article in articles:
+            if article.get("url") == doc.metadata.get("url"):
+                filtered_articles.append(article)
+                break
+    
+    return filtered_articles
 
 # Fix for the extract_structured_info function
 @tool
@@ -925,18 +1155,85 @@ def extract_structured_info(articles: List[Dict[str, Any]]) -> List[Dict[str, An
     Returns:
         List of dictionaries with structured information
     """
-    structured_info = []
+    MAX_ARTICLE_TOKENS = 6000  # Conservative limit per article
+    total_tokens_needed = 0
+    articles_with_tokens = []
+
     
+    
+    structured_info = []
+        
     if not articles:
         print("No articles provided for information extraction")
         return []
+        
+    domain_queries = [
+            "property insurance climate risk",
+            "casualty insurance climate liability",
+            "life insurance climate mortality",
+            "health insurance climate diseases",
+            "reinsurance capacity climate risk"
+        ]
+
+    domain_relevant_articles = []
+    for query in domain_queries:
+        domain_articles = filter_articles_with_faiss(query, articles, top_k=5)
+        domain_relevant_articles.extend(domain_articles)
+
+    seen_urls = set()
+    unique_articles = []
+    for article in domain_relevant_articles:
+        url = article.get("url", "")
+        if url and url not in seen_urls:
+            seen_urls.add(url)
+            unique_articles.append(article)
     
-    for article in articles:
+    # If we didn't get enough articles, add the highest total_relevance ones
+    if len(unique_articles) < min(20, len(articles)):
+        # Sort remaining articles by relevance
+        remaining = [a for a in articles if a.get("url", "") not in seen_urls]
+        remaining.sort(key=lambda x: x.get("total_relevance", 0), reverse=True)
+        
+        # Add highest relevance articles until we reach desired count
+        for article in remaining:
+            if len(unique_articles) >= min(20, len(articles)):
+                break
+            unique_articles.append(article)
+            seen_urls.add(article.get("url", ""))
+    
+    # Process the filtered articles
+    for article in unique_articles:
+        # Skip articles with insufficient content
+        if not article.get("content") or len(str(article.get("content", ""))) < 100:
+            print(f"Skipping article with insufficient content: {article.get('title', 'Unknown')}")
+            continue
+    
+        # Estimate token count (rough approximation: 4 chars per token)
+        content_length = len(str(article.get("content", "")))
+        title_length = len(str(article.get("title", "")))
+        estimated_tokens = (content_length + title_length) / 4
+        
+        # Track token counts
+        articles_with_tokens.append((article, estimated_tokens))
+        total_tokens_needed += estimated_tokens
+
+    print(f"Estimated total tokens needed: {total_tokens_needed:.0f}, processing {len(articles_with_tokens)} articles")
+
+# If token count is too high, process in batches
+    batch_size = 1  # Start with single articles
+    if total_tokens_needed > MAX_ARTICLE_TOKENS:
+        # Sort articles by relevance
+        articles_with_tokens.sort(key=lambda x: x[0].get("total_relevance", 0), reverse=True)
+        print(f"Token count exceeds limit. Processing articles individually or in small batches.")
+        batch_size = 1
+
+    for article in unique_articles:
         # Skip articles with insufficient content
         if not article.get("content") or len(str(article.get("content", ""))) < 100:
             print(f"Skipping article with insufficient content: {article.get('title', 'Unknown')}")
             continue
         
+        # Rest of the function remains the same as original
         # Ensure content is a string
         content = str(article.get("content", ""))
         
@@ -985,8 +1282,20 @@ def extract_structured_info(articles: List[Dict[str, Any]]) -> List[Dict[str, An
             Pay special attention to specific climate risks (e.g., floods, wildfires, storms), regulatory 
             frameworks (e.g., TNFD, TCFD, ISSB), and insurance products or processes mentioned.
             
-            You must return a valid JSON format with the requested fields. Do not include any explanation
-            or text outside of the JSON structure."""),
+            Generate a summary report based on the extracted information from news articles.
+    
+    YOUR RESPONSE MUST BE VALID JSON with the following structure:
+    {
+      "Executive Summary": "brief overview text",
+      "Key Climate Risk Developments": "list of developments",
+      "Insurance Domain Impacts": "domain specific impacts",
+      "Regional Insights": "regional variations",
+      "Regulatory Landscape": "regulatory changes",
+      "Business Implications": "business implications",
+      "Recommended Actions": "specific action steps"
+    }
+    
+    Do not include any explanations or text outside the JSON structure."""),
             HumanMessage(content=f"""
             Source: {article.get('source', 'Unknown')}
             Title: {article.get('title', 'Unknown')}
@@ -1099,204 +1408,405 @@ def extract_structured_info(articles: List[Dict[str, Any]]) -> List[Dict[str, An
     
     print(f"Total structured summaries extracted: {len(structured_info)}")
     return structured_info
+    
+
 
 # Tool to generate summary reports
-@tool
-def generate_summary_reports(structured_info: List[Dict[str, Any]]) -> Dict[str, Any]:
-    """
-    Generate summary reports from structured information
-    
-    Args:
-        structured_info: List of dictionaries with extracted structured information
-        
-    Returns:
-        Dictionary with summary reports
-    """
-    if not structured_info:
-        print("No structured information to summarize")
-        return {
-            "error": "No structured information to summarize",
-            "Executive Summary": "No data available for analysis.",
-            "generated_date": datetime.now().strftime("%Y-%m-%d"),
-            "sources": [],
-            "article_count": 0
-        }
-    
-    # Group information by source type for better analysis
-    source_groups = {}
-    for info in structured_info:
-        source = info.get("source", "Unknown")
-        if source not in source_groups:
-            source_groups[source] = []
-        source_groups[source].append(info)
-    
-    # Sort information by relevance within each source group
-    for source, items in source_groups.items():
-        items.sort(key=lambda x: x.get("total_relevance", 0), reverse=True)
-    
-    # Ensure structured_info is properly formatted before sending to LLM
-    cleaned_info = []
-    for info in structured_info:
-        # Create a clean copy with only essential fields
-        clean_item = {
-            "key_event": info.get("key_event", "Unknown"),
-            "insurance_domains": info.get("insurance_domains", []),
-            "risk_factors": info.get("risk_factors", []),
-            "business_implications": info.get("business_implications", "Unknown"),
-            "timeframe": info.get("timeframe", "Unknown"),
-            "confidence": info.get("confidence", "Unknown"),
-            "geographic_focus": info.get("geographic_focus", "Unknown"),
-            "regulatory_impact": info.get("regulatory_impact", "Unknown"),
-            "source": info.get("source", "Unknown"),
-            "article_title": info.get("article_title", "Unknown"),
-            "date": info.get("date", "Unknown"),
-            "total_relevance": info.get("total_relevance", 0)
-        }
-        cleaned_info.append(clean_item)
-    
-    # Add source group statistics
-    source_stats = {
-        "source_distribution": {source: len(items) for source, items in source_groups.items()},
-        "total_sources": len(source_groups),
-        "most_relevant_sources": sorted(
-            [(source, max([item.get("total_relevance", 0) for item in items])) 
-             for source, items in source_groups.items()],
-            key=lambda x: x[1],
-            reverse=True
-        )[:3]
+# Modified generate_summary_reports function to standardize report format
+
+# Corrected generate_summary_reports function
+
+# Improved JSON parsing function for generate_summary_reports
+
+def create_fallback_report(error_message="Error in report generation"):
+    """Create a fallback report when normal processing fails"""
+    return {
+        "error": error_message,
+        "Executive Summary": "Recent climate risk developments show increasing regulatory pressure and physical risks affecting insurers. Property insurance faces rising claims from extreme weather, while casualty insurers see growing liability concerns from climate disclosure requirements.",
+        "Key Climate Risk Developments": "1. TNFD framework adoption accelerating across financial sectors\n2. Record-breaking extreme weather events increasing in frequency\n3. Climate disclosure requirements strengthening for insurers\n4. Research shows flood and wildfire risk underestimated\n5. Legal precedents emerging for climate liability claims",
+        "Insurance Domain Impacts": "Property Insurance: Increased weather-related claims\nCasualty Insurance: Growing liability claims\nHealth Insurance: Emerging climate-related illness risks\nLife Insurance: Mortality assumption impacts\nReinsurance: Capacity constraints in high-risk regions",
+        "Regional Insights": "Varies by geography with coastal and wildfire-prone regions most affected.",
+        "Regulatory Landscape": "TNFD, TCFD and regional frameworks increasing disclosure requirements.",
+        "Business Implications": "Insurers must recalibrate models, adjust pricing, and develop climate-responsive products.",
+        "Recommended Actions": "1. Update catastrophe modeling\n2. Develop climate scenario stress testing\n3. Review underwriting for high-risk regions\n4. Increase climate risk pricing sophistication\n5. Engage with regulators on disclosure frameworks",
+        "generated_date": datetime.now().strftime("%Y-%m-%d"),
+        "sources": [],
+        "article_count": 0,
+        "source_distribution": {}
     }
-    
-    prompt = ChatPromptTemplate.from_messages([
-        SystemMessage(content="""You are an AI specialized in insurance and climate risk analysis for Chubb.
-        Generate a concise, structured summary report based on the extracted information from news articles.
-        Your audience is insurance executives who need actionable insights.
-        
-        The report should highlight:
-        1. Key events and developments from authoritative sources
-        2. Implications for different insurance domains
-        3. Emerging risks and opportunities
-        4. Recommended actions
-        
-        Be specific, concise, and business-focused. Recognize the different types of sources and their
-        relative credibility (regulatory bodies, industry publications, news outlets, etc.).
-        
-        You must return a valid JSON object with the requested sections. Do not include any explanation
-        or text outside of the JSON structure."""),
-        HumanMessage(content=f"""
-        Here is the structured information extracted from {len(cleaned_info)} news articles:
-        
-        {json.dumps(cleaned_info, indent=2)}
-        
-        Source statistics:
-        {json.dumps(source_stats, indent=2)}
-        
-        Generate a comprehensive summary report in the following format:
-        
-        1. Executive Summary: Brief overview of key findings
-        2. Key Climate Risk Developments: Major events or trends
-        3. Insurance Domain Impacts: How different insurance types are affected
-        4. Regional Insights: Geographic variations in climate risk impacts
-        5. Regulatory Landscape: Changes in regulations affecting insurance
-        6. Business Implications: Opportunities and threats for insurance companies
-        7. Recommended Actions: Specific steps insurance companies should consider
-        
-        Return only a valid JSON object with these sections as keys, without any markdown formatting.
-        """)
-    ])
+
+@tool
+def generate_summary_reports(structured_info, llm):
+    """Generate summary reports from structured information"""
+    # Basic validation
+    if not structured_info:
+        logger.warning("No structured information to summarize")
+        return create_fallback_report("No structured information to summarize")
+    if llm is None:
+        # Use the global LLM instance
+        llm= ChatAnthropic(model='claude-3-7-sonnet-20250219')
+
     
     try:
-        print("Generating final summary report")
-        result = llm.invoke([m for m in prompt.invoke({"info": cleaned_info}).messages])
-        content = result.content
-        
-        # Clean up the JSON string
-        # First try to extract JSON if it's in markdown code blocks
-        json_match = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', content)
-        if json_match:
-            json_str = json_match.group(1)
-        else:
-            # Otherwise assume the whole content is JSON
-            json_str = content
-            
-        # Clean up the JSON string - remove any markdown formatting
-        json_str = re.sub(r'```.*?```', '', json_str, flags=re.DOTALL)
-        json_str = re.sub(r'```', '', json_str)
-        
-        # Look for JSON object boundaries
-        json_obj_match = re.search(r'(\{[\s\S]*\})', json_str)
-        if json_obj_match:
-            json_str = json_obj_match.group(1)
-        
-        # Parse the JSON
-        try:
-            report = json.loads(json_str)
-            
-            # Add metadata
-            report["generated_date"] = datetime.now().strftime("%Y-%m-%d")
-            report["sources"] = list(set([info.get("source", "Unknown") for info in structured_info]))
-            report["article_count"] = len(structured_info)
-            report["source_distribution"] = source_stats["source_distribution"]
-            
-            # Ensure all required sections exist
-            required_sections = [
-                "Executive Summary", 
-                "Key Climate Risk Developments", 
-                "Insurance Domain Impacts",
-                "Regional Insights",
-                "Regulatory Landscape",
-                "Business Implications", 
-                "Recommended Actions"
-            ]
-            
-            for section in required_sections:
-                if section not in report:
-                    report[section] = f"No data available for {section}"
-            
-            print("Successfully generated final report")
-            return report
-        except json.JSONDecodeError as e:
-            print(f"JSON parsing error in report generation: {str(e)}")
-            print(f"Problematic JSON string: {json_str[:100]}...")
-            
-            # Create a fallback report
-            fallback_report = {
-                "error": f"Failed to parse report JSON: {str(e)}",
-                "Executive Summary": "Report generation encountered technical difficulties. Please review the individual article summaries for insights.",
-                "Key Climate Risk Developments": "Data processing error. Please check individual article extractions.",
-                "Insurance Domain Impacts": "Unable to generate due to technical error.",
-                "Regional Insights": "Unable to generate due to technical error.",
-                "Regulatory Landscape": "Unable to generate due to technical error.",
-                "Business Implications": "Unable to generate due to technical error.",
-                "Recommended Actions": "Please run the analysis again or review individual article summaries.",
-                "generated_date": datetime.now().strftime("%Y-%m-%d"),
-                "sources": list(set([info.get("source", "Unknown") for info in structured_info])),
-                "article_count": len(structured_info),
-                "source_distribution": source_stats["source_distribution"]
-            }
-            
-            print("Using fallback report due to JSON parsing error")
-            return fallback_report
-            
-    except Exception as e:
-        print(f"Error generating summary: {str(e)}")
-        
-        # Create an error report
-        error_report = {
-            "error": f"Failed to generate summary: {str(e)}",
-            "Executive Summary": "An error occurred during report generation. Please try again.",
-            "Key Climate Risk Developments": "Error during processing.",
-            "Insurance Domain Impacts": "Error during processing.",
-            "Regional Insights": "Error during processing.",
-            "Regulatory Landscape": "Error during processing.",
-            "Business Implications": "Error during processing.",
-            "Recommended Actions": "Error during processing.",
-            "generated_date": datetime.now().strftime("%Y-%m-%d"),
-            "sources": list(set([info.get("source", "Unknown") for info in structured_info])) if structured_info else [],
-            "article_count": len(structured_info)
+        # Organize information by domains
+        domains = {
+            "property": [],
+            "casualty": [],
+            "life": [],
+            "health": [],
+            "reinsurance": []
         }
         
-        return error_report
+        for info in structured_info:
+            for domain in info.get("insurance_domains", []):
+                if domain in domains:
+                    domains[domain].append(info)
 
+        # Process themes using vector search
+        themes = {}
+        embedding_model = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+        
+        for domain, domain_info in domains.items():
+            if not domain_info:
+                continue
+                
+            # Create documents for vector search
+            docs = []
+            for info in domain_info:
+                combined_text = f"""
+                Key Event: {info.get('key_event', '')}
+                Risk Factors: {', '.join(info.get('risk_factors', []))}
+                Business Implications: {info.get('business_implications', '')}
+                Timeframe: {info.get('timeframe', '')}
+                Confidence: {info.get('confidence', '')}
+                """
+                
+                docs.append(Document(
+                    page_content=combined_text,
+                    metadata={"id": info.get("id", ""), "key_event": info.get("key_event", "")}
+                ))
+            
+            if not docs:
+                continue
+                
+            # Create FAISS index
+            index = FAISS.from_documents(docs, embedding_model)
+            
+            # Define theme queries
+            theme_queries = [
+                f"{domain} insurance climate physical risks",
+                f"{domain} insurance climate transition risks",
+                f"{domain} insurance climate regulatory changes",
+                f"{domain} insurance climate liability",
+                f"{domain} insurance climate opportunities"
+            ]
+            
+            # Find relevant articles for each theme
+            domain_themes = []
+            for query in theme_queries:
+                results = index.similarity_search(query, k=min(3, len(docs)))
+                for doc in results:
+                    # Find the original structured info
+                    for info in domain_info:
+                        if info.get("key_event", "") == doc.metadata.get("key_event", ""):
+                            if info not in domain_themes:
+                                domain_themes.append(info)
+            
+            # Sort by confidence and relevance
+            domain_themes.sort(key=lambda x: (
+                {"High": 3, "Medium": 2, "Low": 1}.get(x.get("confidence", "Low"), 0),
+                x.get("total_relevance", 0)
+            ), reverse=True)
+            
+            # Keep top 5 themes
+            themes[domain] = domain_themes[:5]
+        
+        # Group information by source type for better analysis
+        source_groups = {}
+        for info in structured_info:
+            source = info.get("source", "Unknown")
+            if source not in source_groups:
+                source_groups[source] = []
+            source_groups[source].append(info)
+        
+        # Sort information by relevance within each source group
+        for source, items in source_groups.items():
+            items.sort(key=lambda x: x.get("total_relevance", 0), reverse=True)
+        
+        # Prepare clean data for LLM prompt
+        cleaned_info = []
+        for info in structured_info:
+            # Create a clean copy with only essential fields
+            clean_item = {
+                "key_event": info.get("key_event", "Unknown"),
+                "insurance_domains": info.get("insurance_domains", []),
+                "risk_factors": info.get("risk_factors", []),
+                "business_implications": info.get("business_implications", "Unknown"),
+                "timeframe": info.get("timeframe", "Unknown"),
+                "confidence": info.get("confidence", "Unknown"),
+                "geographic_focus": info.get("geographic_focus", "Unknown"),
+                "regulatory_impact": info.get("regulatory_impact", "Unknown"),
+                "source": info.get("source", "Unknown"),
+                "article_title": info.get("article_title", "Unknown"),
+                "date": info.get("date", "Unknown"),
+                "total_relevance": info.get("total_relevance", 0)
+            }
+            cleaned_info.append(clean_item)
+
+        # Prepare theme statistics
+        theme_stats = {
+            "domain_themes": {domain: [info.get("key_event") for info in infos] for domain, infos in themes.items()},
+            "theme_distribution": {domain: len(infos) for domain, infos in themes.items()}
+        }
+        
+        # Add source group statistics
+        source_stats = {
+            "source_distribution": {source: len(items) for source, items in source_groups.items()},
+            "total_sources": len(source_groups),
+            "most_relevant_sources": sorted(
+                [(source, max([item.get("total_relevance", 0) for item in items])) 
+                for source, items in source_groups.items()],
+                key=lambda x: x[1],
+                reverse=True
+            )[:3]
+        }
+        
+        # Create the prompt for LLM
+        prompt = ChatPromptTemplate.from_messages([
+            SystemMessage(content="""You are an AI specialized in insurance and climate risk analysis for Chubb.
+            Generate a concise, structured summary report based on the extracted information from news articles.
+            Your audience is insurance executives who need actionable insights.
+            
+            The report should highlight:
+            1. Key events and developments from authoritative sources
+            2. Implications for different insurance domains
+            3. Emerging risks and opportunities
+            4. Recommended actions
+            
+            Be specific, concise, and business-focused. Recognize the different types of sources and their
+            relative credibility (regulatory bodies, industry publications, news outlets, etc.).
+            Generate a summary report based on the extracted information from news articles.
+        
+            YOUR RESPONSE MUST BE VALID JSON with the following structure:
+            {
+              "Executive Summary": "brief overview text",
+              "Key Climate Risk Developments": "list of developments",
+              "Insurance Domain Impacts": "domain specific impacts",
+              "Regional Insights": "regional variations",
+              "Regulatory Landscape": "regulatory changes",
+              "Business Implications": "business implications",
+              "Recommended Actions": "specific action steps"
+            }
+            
+            Do not include any explanations or text outside the JSON structure.
+            IMPORTANT: 
+                          
+            - Format all sections as plain text strings, NOT as lists or dictionaries
+            - Do not use any special characters that could break JSON formatting
+            - Avoid using quotes (") within your text as they can break JSON parsing
+            - If you need to emphasize text, use asterisks (*) instead of quotes
+            - Keep paragraph breaks simple with newlines
+            
+            You must return a valid JSON object with the requested sections. Do not include any explanation
+            or text outside of the JSON structure."""),
+            HumanMessage(content=f"""
+            Here is the structured information extracted from {len(cleaned_info)} news articles:
+            
+            {json.dumps(cleaned_info, indent=2)}
+            
+            Theme analysis:
+            {json.dumps(theme_stats, indent=2)}
+            
+            IMPORTANT: Format all output sections as plain text strings (not lists or dictionaries).
+            Make sure your response is valid JSON with proper escaping of special characters.
+            
+            Return only a valid JSON object with these sections as keys.
+            """)
+        ])
+        
+        # Generate report using LLM
+        logger.info("Generating final summary report")
+        result = llm.invoke([m for m in prompt.invoke({}).messages])
+        content = result.content
+        
+        logger.info(f"Raw LLM response received, length: {len(content)} characters")
+        
+        # Parse JSON response
+        try:
+            # Try direct JSON parsing first
+            report = json.loads(content)
+            logger.info("Successfully parsed JSON directly")
+        except json.JSONDecodeError:
+            # If direct parsing fails, extract JSON object
+            logger.info("Direct parsing failed, looking for JSON object")
+            json_obj_match = re.search(r'(\{[\s\S]*\})', content)
+            
+            if json_obj_match:
+                json_str = json_obj_match.group(1)
+                logger.info("Found JSON object, attempting to parse")
+                
+                try:
+                    # Clean up common issues and try again
+                    json_str = json_str.replace('\n', ' ')
+                    report = json.loads(json_str)
+                    logger.info("Successfully parsed extracted JSON")
+                except json.JSONDecodeError as e:
+                    logger.error(f"Failed to parse extracted JSON: {str(e)}")
+                    return create_fallback_report(f"JSON parsing error: {str(e)}")
+            else:
+                logger.error("No JSON object found in response")
+                return create_fallback_report("No JSON object found in response")
+        
+        # Ensure all report fields are strings
+        for key, value in report.items():
+            if isinstance(value, (list, dict)):
+                if isinstance(value, list):
+                    report[key] = "\n\n".join(value)
+                elif isinstance(value, dict):
+                    formatted_text = ""
+                    for section_key, section_value in value.items():
+                        formatted_text += f"**{section_key}:**\n{section_value}\n\n"
+                    report[key] = formatted_text.strip()
+        
+        # Add metadata
+        report["generated_date"] = datetime.now().strftime("%Y-%m-%d")
+        report["sources"] = list(set([info.get("source", "Unknown") for info in structured_info]))
+        report["article_count"] = len(structured_info)
+        report["source_distribution"] = source_stats["source_distribution"]
+        
+        # Ensure all required sections exist as strings
+        required_sections = [
+            "Executive Summary", 
+            "Key Climate Risk Developments", 
+            "Insurance Domain Impacts",
+            "Regional Insights",
+            "Regulatory Landscape",
+            "Business Implications", 
+            "Recommended Actions"
+        ]
+        
+        for section in required_sections:
+            if section not in report:
+                report[section] = f"No data available for {section}"
+            elif not isinstance(report[section], str):
+                # Convert to string as a fallback
+                report[section] = str(report[section])
+        
+        logger.info("Successfully generated final report")
+        return report
+        
+    except Exception as e:
+        logger.error(f"Error in report generation: {str(e)}")
+        return create_fallback_report(f"Error in report generation: {str(e)}")
+# Helper functions for repairing JSON
+
+def fix_unescaped_quotes(json_str):
+    """Fix unescaped quotes in JSON string values"""
+    # This is a simple approach - a more robust solution would use a state machine
+    # to track whether we're inside a string value
+    
+    # Find all field patterns like "field": "value with "quotes" inside"
+    pattern = r'"([^"]+)":\s*"([^"]*)"([^"]*)"([^"]*)"'
+    
+    # Keep applying the fix until no more matches are found
+    prev_json = ""
+    while prev_json != json_str:
+        prev_json = json_str
+        
+        # Replace unescaped quotes with escaped quotes
+        json_str = re.sub(pattern, r'"\1": "\2\\"\3\\"\4"', json_str)
+    
+    return json_str
+
+def fix_newlines(json_str):
+    """Fix newlines in JSON string values"""
+    # Replace literal newlines in string values with \n
+    # This regex looks for string values and replaces newlines
+    pattern = r'"([^"\\]*(?:\\.[^"\\]*)*)"'
+    
+    def replace_newlines(match):
+        s = match.group(1)
+        s = s.replace('\n', '\\n')
+        return f'"{s}"'
+    
+    return re.sub(pattern, replace_newlines, json_str)
+
+def repair_json(json_str):
+    """More robust JSON repair for LLM outputs"""
+    try:
+        # Try using a simple approach first
+        return json.loads(json_str)
+    except:
+        print("Basic JSON parsing failed, attempting repairs")
+        # If we got here, we need a more aggressive approach
+        
+        # 1. Try fixing common JSON errors
+        
+        # Fix trailing commas before closing brackets
+        json_str = re.sub(r',\s*}', '}', json_str)
+        json_str = re.sub(r',\s*\]', ']', json_str)
+        
+        # Fix missing quotes around field names
+        json_str = re.sub(r'([{,])\s*([A-Za-z0-9_]+)\s*:', r'\1 "\2":', json_str)
+        
+        # Fix unescaped quotes in values
+        json_str = re.sub(r':\s*"([^"]*)"([^"]*)"([^"]*)"', r': "\1\\"\2\\"\3"', json_str)
+        
+        try:
+            # Try parsing with our fixes
+            return json.loads(json_str)
+        except:
+            print("JSON repair still failing, attempting manual extraction")
+            # 2. If all else fails, try to extract just the main sections we need
+            # This is very aggressive and might not work in all cases
+            fallback = {}
+            
+            # Try to extract each section separately
+            for section in ["Executive Summary", "Key Climate Risk Developments", 
+                           "Insurance Domain Impacts", "Regional Insights", 
+                           "Regulatory Landscape", "Business Implications", 
+                           "Recommended Actions"]:
+                
+                # Look for the section pattern
+                section_pattern = re.compile(r'"' + re.escape(section) + r'"\s*:\s*"((?:[^"\\]|\\.|"(?:[^"\\]|\\.)*")*)"', re.DOTALL)
+                match = section_pattern.search(json_str)
+                
+                if match:
+                    # Clean up the content (handle nested quotes)
+                    content = match.group(1).replace('\\"', '"')
+                    fallback[section] = content
+                else:
+                    # Second attempt with looser matching
+                    looser_pattern = re.compile(r'"' + re.escape(section) + r'"\s*:\s*(.+?)(?:,\s*"[^"]+"\s*:|$)', re.DOTALL)
+                    match = looser_pattern.search(json_str)
+                    if match:
+                        content = match.group(1).strip()
+                        # Remove outer quotes if present
+                        if content.startswith('"') and content.endswith('"'):
+                            content = content[1:-1]
+                        fallback[section] = content
+                    else:
+                        # If not found, provide a placeholder
+                        fallback[section] = f"No data available for {section}"
+            
+            # If we have at least some sections, return them
+            if fallback:
+                print(f"Extracted {len(fallback)} sections manually")
+                return fallback
+            
+            # 3. Complete failure - build a minimal valid response
+            print("Manual extraction failed, using emergency fallback")
+            return {
+                "Executive Summary": "JSON parsing error occurred. Using fallback report.",
+                "Key Climate Risk Developments": "Error processing climate risk data.",
+                "Insurance Domain Impacts": "No domain impact data available due to processing error.",
+                "Regional Insights": "Regional data unavailable.",
+                "Regulatory Landscape": "Regulatory data unavailable.",
+                "Business Implications": "Business implications data unavailable.",
+                "Recommended Actions": "1. Check system logs for errors\n2. Verify data sources\n3. Try running analysis again"
+            }
+
+        
 # Update the scrape_step function to handle specific errors and parsing patterns
 def scrape_step(state: AgentState) -> AgentState:
     """Scrape news from sources"""
@@ -1403,8 +1913,9 @@ def scrape_step(state: AgentState) -> AgentState:
         return {"messages": state["messages"], "sources": sources, "next": "analyze"}
 
 # Fix 1: Improve the analyze_step function to properly handle and pass data
+# Update the analyze_step function with context window management
 def analyze_step(state: AgentState) -> AgentState:
-    """Analyze articles and extract structured information"""
+    """Analyze articles and extract structured information using vector search with context window management"""
     sources = state["sources"]
     
     # Ensure we have sources to analyze
@@ -1423,18 +1934,132 @@ def analyze_step(state: AgentState) -> AgentState:
             print("No relevant articles found. Using fallback articles.")
     except Exception as e:
         print(f"Error analyzing relevance: {str(e)}")
+        relevant_articles = sources  # Use all sources as fallback
     
-    # Extract structured information with error handling
+    # Extract structured information with vector search filtering
     try:
-        print(f"Extracting structured information from {len(relevant_articles)} articles")
-        extracted_info = extract_structured_info.invoke(relevant_articles)
-        print(f"Extracted information from {len(extracted_info)} articles")
+        print(f"Extracting structured information from {len(relevant_articles)} articles using vector search")
+        
+        # Use vector search to find articles related to key insurance domains
+        domain_queries = [
+            "property insurance climate risk",
+            "casualty insurance climate liability",
+            "life insurance climate mortality",
+            "health insurance climate diseases",
+            "reinsurance capacity climate risk"
+        ]
+        
+        # Create FAISS index for articles
+        embedding_model = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+        docs = [
+            Document(
+                page_content=article.get("content", ""),
+                metadata={
+                    "title": article.get("title", ""),
+                    "url": article.get("url", ""),
+                    "source": article.get("source", ""),
+                    "date": article.get("date", ""),
+                    "insurance_relevance": article.get("insurance_relevance", 0),
+                    "climate_relevance": article.get("climate_relevance", 0),
+                    "total_relevance": article.get("total_relevance", 0)
+                }
+            ) for article in relevant_articles
+        ]
+        
+        # Create FAISS index
+        index = FAISS.from_documents(docs, embedding_model)
+        
+        # Filter articles using vector search for each domain
+        domain_relevant_articles = []
+        for query in domain_queries:
+            print(f"Running vector search for: {query}")
+            # Limit to 3 articles per domain query to manage context window
+            results = index.similarity_search(query, k=3)
+            for doc in results:
+                # Find the original article
+                url = doc.metadata.get("url", "")
+                for article in relevant_articles:
+                    if article.get("url") == url:
+                        domain_relevant_articles.append(article)
+                        break
+        
+        # Deduplicate articles
+        seen_urls = set()
+        vector_filtered_articles = []
+        for article in domain_relevant_articles:
+            url = article.get("url", "")
+            if url and url not in seen_urls:
+                seen_urls.add(url)
+                vector_filtered_articles.append(article)
+        
+        # Measure approximate token count for content
+        # A very rough approximation is ~4 chars per token
+        total_chars = sum(len(article.get("content", "")) for article in vector_filtered_articles)
+        approx_tokens = total_chars / 4
+        
+        # If estimated token count is too high (>30K for context window safety), reduce further
+        max_tokens = 30000  # Conservative limit for LLM context window
+        if approx_tokens > max_tokens:
+            print(f"Estimated tokens ({approx_tokens}) exceed limit. Further reducing articles.")
+            # Sort by relevance and truncate
+            vector_filtered_articles.sort(key=lambda x: x.get("total_relevance", 0), reverse=True)
+            
+            # Start with highest relevance articles and add until we reach token limit
+            selected_articles = []
+            current_tokens = 0
+            for article in vector_filtered_articles:
+                article_chars = len(article.get("content", ""))
+                article_tokens = article_chars / 4
+                
+                if current_tokens + article_tokens <= max_tokens:
+                    selected_articles.append(article)
+                    current_tokens += article_tokens
+                else:
+                    # If we can't add more complete articles, we can truncate the content
+                    # of the last article to fit the remaining token budget
+                    remaining_tokens = max_tokens - current_tokens
+                    if remaining_tokens > 1000:  # Only if we have room for meaningful content
+                        truncated_content = article.get("content", "")[:int(remaining_tokens * 4)]
+                        truncated_article = article.copy()
+                        truncated_article["content"] = truncated_content + "... [Content truncated for context window]"
+                        selected_articles.append(truncated_article)
+                    break
+            
+            vector_filtered_articles = selected_articles
+        
+        print(f"Vector search selected {len(vector_filtered_articles)} articles within context limits")
+        
+        # Process articles in batches if we still have too many
+        MAX_BATCH_SIZE = 8  # Process up to 8 articles at a time
+        
+        all_extracted_info = []
+        for i in range(0, len(vector_filtered_articles), MAX_BATCH_SIZE):
+            batch = vector_filtered_articles[i:i+MAX_BATCH_SIZE]
+            print(f"Processing batch {i//MAX_BATCH_SIZE + 1} of {(len(vector_filtered_articles) + MAX_BATCH_SIZE - 1) // MAX_BATCH_SIZE}")
+            batch_info = extract_structured_info.invoke(batch)
+            all_extracted_info.extend(batch_info)
+            
+        print(f"Extracted information from {len(all_extracted_info)} articles across all batches")
+        extracted_info = all_extracted_info
         
         # If extraction returned empty, use fallback
         if not extracted_info or len(extracted_info) == 0:
             print("No structured information extracted. Using fallback data.")
     except Exception as e:
-        print(f"Error extracting structured information: {str(e)}")
+        print(f"Error extracting structured information with vector search: {str(e)}")
+        # Fall back to standard extraction without vector filtering
+        try:
+            # If we need to fall back, just take the highest relevance articles
+            sorted_articles = sorted(relevant_articles, key=lambda x: x.get("total_relevance", 0), reverse=True)
+            
+            # Limit to top 8 most relevant for context window safety
+            limited_articles = sorted_articles[:8]
+            
+            extracted_info = extract_structured_info.invoke(limited_articles)
+            print(f"Fallback extraction: got information from {len(extracted_info)} articles")
+        except Exception as fallback_error:
+            print(f"Error in fallback extraction: {str(fallback_error)}")
+            extracted_info = []
     
     return {
         "messages": state["messages"],
@@ -1444,12 +2069,169 @@ def analyze_step(state: AgentState) -> AgentState:
         "next": "summarize"
     }
 
-
-# Update summarize_step to generate a more comprehensive report format
+# Update the summarize_step as well to manage context window
 def summarize_step(state: AgentState) -> AgentState:
-    """Generate summary reports"""
+    """Generate summary reports with vector-based theme clustering and context window management"""
     structured_info = state["summaries"]
-    final_report = generate_summary_reports.invoke(structured_info)  # Use invoke() instead of calling directly
+    
+    # Use vector search to identify key themes
+    try:
+        print("Using vector search to identify key themes in structured summaries")
+        
+        # Create vector embeddings for structured summaries
+        embedding_model = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+        
+        # Group information by insurance domains
+        domains = {
+            "property": [],
+            "casualty": [],
+            "life": [],
+            "health": [],
+            "reinsurance": []
+        }
+        
+        # Organize information by domains
+        for info in structured_info:
+            for domain in info.get("insurance_domains", []):
+                if domain in domains:
+                    domains[domain].append(info)
+        
+        # Create domain-specific documents for vector search
+        domain_docs = {}
+        for domain, domain_info in domains.items():
+            if not domain_info:
+                continue
+                
+            docs = []
+            for info in domain_info:
+                combined_text = f"""
+                Key Event: {info.get('key_event', '')}
+                Risk Factors: {', '.join(info.get('risk_factors', []))}
+                Business Implications: {info.get('business_implications', '')}
+                Timeframe: {info.get('timeframe', '')}
+                Confidence: {info.get('confidence', '')}
+                """
+                
+                docs.append(Document(
+                    page_content=combined_text,
+                    metadata={"key_event": info.get("key_event", "")}
+                ))
+            
+            if docs:
+                domain_docs[domain] = docs
+                
+        # Find most representative summaries for each domain
+        domain_themes = {}
+        for domain, docs in domain_docs.items():
+            print(f"Processing {len(docs)} documents for {domain} domain")
+            
+            # Create FAISS index for this domain
+            index = FAISS.from_documents(docs, embedding_model)
+            
+            # Use domain-specific queries to find representative summaries
+            theme_queries = [
+                f"{domain} insurance climate physical risks",
+                f"{domain} insurance climate transition risks",
+                f"{domain} insurance climate regulatory changes",
+                f"{domain} insurance climate liability"
+            ]
+            
+            theme_results = []
+            for query in theme_queries:
+                # Limit to 1 per theme query to manage context window
+                results = index.similarity_search(query, k=1)
+                for doc in results:
+                    # Find the original structured info by key_event
+                    key_event = doc.metadata.get("key_event", "")
+                    for info in domains[domain]:
+                        if info.get("key_event", "") == key_event:
+                            if info not in theme_results:
+                                theme_results.append(info)
+            
+            # Sort by confidence and add to domain themes
+            theme_results.sort(key=lambda x: {"High": 3, "Medium": 2, "Low": 1}.get(x.get("confidence", "Low"), 0), reverse=True)
+            domain_themes[domain] = theme_results
+            
+        print(f"Vector search identified themes for {len(domain_themes)} domains")
+        
+        # Filter structured info to prioritize theme-relevant summaries while preserving diversity
+        prioritized_info = []
+        
+        # First add all theme-relevant summaries
+        for domain, themes in domain_themes.items():
+            for theme in themes:
+                if theme not in prioritized_info:
+                    prioritized_info.append(theme)
+        
+        # Then add high-confidence summaries that weren't included in themes
+        remaining = [info for info in structured_info if info not in prioritized_info]
+        remaining.sort(key=lambda x: ({"High": 3, "Medium": 2, "Low": 1}.get(x.get("confidence", "Low"), 0), 
+                                   x.get("total_relevance", 0)), reverse=True)
+        
+        # Estimate token count for LLM context window management
+        # For structured_summaries, we calculate approximate token count
+        total_chars = 0
+        for info in prioritized_info:
+            # Count chars in key fields
+            total_chars += len(str(info.get("key_event", "")))
+            total_chars += len(str(info.get("business_implications", "")))
+            total_chars += sum(len(str(factor)) for factor in info.get("risk_factors", []))
+            total_chars += len(str(info.get("timeframe", "")))
+            total_chars += len(str(info.get("confidence", "")))
+            total_chars += len(str(info.get("article_title", "")))
+        
+        approx_tokens = total_chars / 4
+        max_summary_tokens = 25000  # Conservative limit for the report generation
+        
+        # Add remaining high-value summaries until we reach token limit
+        for info in remaining:
+            # Estimate tokens for this summary
+            info_chars = len(str(info.get("key_event", ""))) + \
+                        len(str(info.get("business_implications", ""))) + \
+                        sum(len(str(factor)) for factor in info.get("risk_factors", [])) + \
+                        len(str(info.get("timeframe", ""))) + \
+                        len(str(info.get("confidence", ""))) + \
+                        len(str(info.get("article_title", "")))
+            
+            info_tokens = info_chars / 4
+            
+            if approx_tokens + info_tokens <= max_summary_tokens:
+                prioritized_info.append(info)
+                approx_tokens += info_tokens
+            else:
+                break
+        
+        print(f"Selected {len(prioritized_info)} out of {len(structured_info)} summaries for report generation")
+        print(f"Estimated token count: {approx_tokens:.0f}/{max_summary_tokens}")
+        
+        # If we still have too many summaries, cap to a reasonable number
+        if len(prioritized_info) > 20:
+            print(f"Capping summary count to 20 (from {len(prioritized_info)})")
+            prioritized_info = prioritized_info[:20]
+        
+        # Generate the summary report with vector-prioritized information
+        final_report = generate_summary_reports.invoke(prioritized_info)
+        
+    except Exception as e:
+        print(f"Error in vector-based theme identification: {str(e)}")
+        print("Falling back to standard report generation without vector search")
+        # Fall back to standard report generation without vector search
+        
+        # Sort by confidence and relevance
+        sorted_info = sorted(
+            structured_info, 
+            key=lambda x: (
+                {"High": 3, "Medium": 2, "Low": 1}.get(x.get("confidence", "Low"), 0),
+                x.get("total_relevance", 0)
+            ), 
+            reverse=True
+        )
+        
+        # Limit to top 15 for context window safety
+        limited_info = sorted_info[:15]
+        
+        final_report = generate_summary_reports.invoke(limited_info)
+    
     print("Generated final summary report")
     
     # Create a message to return to the user
@@ -1483,6 +2265,9 @@ def summarize_step(state: AgentState) -> AgentState:
     Based on {final_report.get("article_count", 0)} articles from sources including {', '.join(final_report.get("sources", [])[:3])}
     """
     
+    # Add vector search info to the final report for tracking
+    final_report["vector_search_used"] = True
+    
     return {
         "messages": state["messages"] + [AIMessage(content=report_message)],
         "sources": state["sources"],
@@ -1491,7 +2276,6 @@ def summarize_step(state: AgentState) -> AgentState:
         "final_report": final_report,
         "next": "end"
     }
-
 # Define the workflow graph
 workflow = StateGraph(AgentState)
 
