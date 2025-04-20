@@ -1,5 +1,7 @@
 🧠 Project: Climate Risk Intelligence – AI-Powered Climate Risk Intelligence for Insurance
+
 🌪️ Real-Time Climate-Aware Underwriting. For All Lines of Insurance.
+
 🎯 Problem
 Climate volatility, evolving ESG mandates, and shifting regulatory landscapes are rapidly reshaping insurance underwriting. Traditional tools are:
 
