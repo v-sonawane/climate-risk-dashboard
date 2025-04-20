@@ -18,6 +18,7 @@ import RegulatoryESGTracker from './RegulatoryESGTracker.jsx';
 // API base URL - change this to match your backend URL
 const API_BASE_URL = 'http://localhost:8000';
 
+
 // COLORS
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d'];
 const TREND_COLORS = {
@@ -26,51 +27,7 @@ const TREND_COLORS = {
   decreasing: '#008FFB'
 };
 // Updated fetchFrameworksData function with proper error handling
-const fetchFrameworksData = async () => {
-  try {
-    const res = await fetch(`${API_BASE_URL}/regulatory/frameworks`);
-    if (!res.ok) throw new Error("Failed to fetch frameworks data");
-    const data = await res.json();
-    setFrameworks(data);
-  } catch (error) {
-    console.error("Error fetching frameworks data:", error);
-    // Set fallback data
-    setFrameworks([
-      { id: 1, name: "TCFD", status: "established" },
-      { id: 2, name: "TNFD", status: "emerging" },
-      { id: 3, name: "EU Taxonomy", status: "established" },
-      { id: 4, name: "NAIC Climate Risk Disclosure", status: "emerging" },
-      { id: 5, name: "ISSB Standards", status: "proposed" },
-      { id: 6, name: "CDSB Framework", status: "established" },
-      { id: 7, name: "NGFS Scenarios", status: "emerging" }
-    ]);
-    // Re-throw the error so the main function knows there was an issue
-    throw error;
-  }
-};
 
-// Updated fetchPremiumData function with proper error handling
-const fetchPremiumData = async () => {
-  try {
-    const res = await fetch(`${API_BASE_URL}/underwriting/premium-trends`);
-    if (!res.ok) throw new Error("Failed to fetch premium data");
-    
-    const data = await res.json();
-    if (data.length > 1) {
-      // Calculate the percentage increase between first and last data points
-      const firstPoint = data[0].property;
-      const lastPoint = data[data.length - 1].property;
-      const increase = ((lastPoint / firstPoint) - 1) * 100;
-      setPremiumIncrease(Math.round(increase));
-    }
-  } catch (error) {
-    console.error("Error fetching premium data:", error);
-    // Keep the default fallback value of 48%
-    setPremiumIncrease(48);
-    // Re-throw the error so the main function knows there was an issue
-    throw error;
-  }
-};
 
 const InsuranceClimateDashboard = () => {
   // Tabs and selection
@@ -115,7 +72,81 @@ const InsuranceClimateDashboard = () => {
       .then(data => setArticleSummary(data.summary))
       .catch(() => setArticleSummary("Failed to load summary."));
   }, [selectedArticle]);
+  useEffect(() => {
+    // Fetch regulatory frameworks count for the card
+    const fetchQuickMetrics = async () => {
+      try {
+        // Fetch frameworks data
+        const frameworksRes = await fetch(`${API_BASE_URL}/regulatory/frameworks`);
+        if (frameworksRes.ok) {
+          const frameworksData = await frameworksRes.json();
+          setFrameworks(frameworksData);
+        }
+        
+        // Fetch premium trends data
+        const premiumsRes = await fetch(`${API_BASE_URL}/underwriting/premium-trends`);
+        if (premiumsRes.ok) {
+          const premiumsData = await premiumsRes.json();
+          // Calculate the percentage increase from first to last month
+          if (premiumsData.length > 1) {
+            const firstMonth = premiumsData[0];
+            const lastMonth = premiumsData[premiumsData.length - 1];
+            const increase = Math.round(((lastMonth.property / firstMonth.property) - 1) * 100);
+            setPremiumIncrease(increase);
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching quick metrics:", error);
+      }
+    };
+    
+    fetchQuickMetrics();
+  }, []);
+  const fetchFrameworksData = async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/regulatory/frameworks`);
+      if (!res.ok) throw new Error("Failed to fetch frameworks data");
+      const data = await res.json();
+      setFrameworks(data);
+    } catch (error) {
+      console.error("Error fetching frameworks data:", error);
+      // Set fallback data
+      setFrameworks([
+        { id: 1, name: "TCFD", status: "established" },
+        { id: 2, name: "TNFD", status: "emerging" },
+        { id: 3, name: "EU Taxonomy", status: "established" },
+        { id: 4, name: "NAIC Climate Risk Disclosure", status: "emerging" },
+        { id: 5, name: "ISSB Standards", status: "proposed" },
+        { id: 6, name: "CDSB Framework", status: "established" },
+        { id: 7, name: "NGFS Scenarios", status: "emerging" }
+      ]);
+      // Re-throw the error so the main function knows there was an issue
+      throw error;
+    }
+  };
 
+  // Helper function for fetching premium data
+  const fetchPremiumData = async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/underwriting/premium-trends`);
+      if (!res.ok) throw new Error("Failed to fetch premium data");
+      
+      const data = await res.json();
+      if (data.length > 1) {
+        // Calculate the percentage increase between first and last data points
+        const firstPoint = data[0].property;
+        const lastPoint = data[data.length - 1].property;
+        const increase = ((lastPoint / firstPoint) - 1) * 100;
+        setPremiumIncrease(Math.round(increase));
+      }
+    } catch (error) {
+      console.error("Error fetching premium data:", error);
+      // Keep the default fallback value of 48%
+      setPremiumIncrease(48);
+      // Re-throw the error so the main function knows there was an issue
+      throw error;
+    }
+  };
   // Core data fetch
   const fetchDashboardData = async () => {
     setIsLoading(true);
@@ -215,16 +246,7 @@ const InsuranceClimateDashboard = () => {
         await fetchFrameworksData();
       } catch (error) {
         console.error("Error in fetchFrameworksData:", error);
-        // Set fallback frameworks data
-        setFrameworks([
-          { id: 1, name: "TCFD", status: "established" },
-          { id: 2, name: "TNFD", status: "emerging" },
-          { id: 3, name: "EU Taxonomy", status: "established" },
-          { id: 4, name: "NAIC Climate Risk Disclosure", status: "emerging" },
-          { id: 5, name: "ISSB Standards", status: "proposed" },
-          { id: 6, name: "CDSB Framework", status: "established" },
-          { id: 7, name: "NGFS Scenarios", status: "emerging" }
-        ]);
+        // Set fallback frameworks data is handled in the fetchFrameworksData function
       }
   
       // 6) Premium data
@@ -232,8 +254,7 @@ const InsuranceClimateDashboard = () => {
         await fetchPremiumData();
       } catch (error) {
         console.error("Error in fetchPremiumData:", error);
-        // Set fallback premium increase
-        setPremiumIncrease(48);
+        // Set fallback premium increase is handled in the fetchPremiumData function
       }
       
     } catch (mainError) {
@@ -586,34 +607,36 @@ const InsuranceClimateDashboard = () => {
                     </ResponsiveContainer>
                   </div>
                 </div>
-                <div className="bg-white p-4 rounded-lg shadow hover:shadow-md transition-shadow cursor-pointer" 
-                        onClick={() => setActiveTab('regulatory')}>
-                      <h3 className="text-lg font-semibold mb-2">Regulatory & ESG Intelligence</h3>
-                      <p className="text-gray-600 mb-3">
-                        Monitor regulatory frameworks, ESG impacts, and compliance requirements affecting insurance business lines.
-                      </p>
-                      <div className="flex justify-between items-center">
-                        <div className="bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs font-medium">
-                          {frameworks ? frameworks.length : '7'} Frameworks
-                        </div>
-                        <span className="text-blue-600 text-sm">View details →</span>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                  <div className="bg-white p-4 rounded-lg shadow hover:shadow-md transition-shadow cursor-pointer" 
+                      onClick={() => setActiveTab('regulatory')}>
+                    <h3 className="text-lg font-semibold mb-2">Regulatory & ESG Intelligence</h3>
+                    <p className="text-gray-600 mb-3">
+                      Monitor regulatory frameworks, ESG impacts, and compliance requirements affecting insurance business lines.
+                    </p>
+                    <div className="flex justify-between items-center">
+                      <div className="bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs font-medium">
+                        {frameworks ? frameworks.length : '7'} Frameworks
                       </div>
+                      <span className="text-blue-600 text-sm">View details →</span>
                     </div>
+                  </div>
 
-                <div className="bg-white p-4 rounded-lg shadow hover:shadow-md transition-shadow cursor-pointer"
-                    onClick={() => setActiveTab('underwriting')}>
-                  <h3 className="text-lg font-semibold mb-2">Underwriting & Coverage Analysis</h3>
-                  <p className="text-gray-600 mb-3">
-                    Analyze premium trends, coverage gaps, and underwriting challenges related to climate risks.
-                  </p>
-                  <div className="flex justify-between items-center">
-                    <div className="bg-orange-100 text-orange-800 px-2 py-1 rounded-full text-xs font-medium">
-                      Property Premiums +{premiumIncrease || '48'}%
+                  <div className="bg-white p-4 rounded-lg shadow hover:shadow-md transition-shadow cursor-pointer"
+                      onClick={() => setActiveTab('underwriting')}>
+                    <h3 className="text-lg font-semibold mb-2">Underwriting & Coverage Analysis</h3>
+                    <p className="text-gray-600 mb-3">
+                      Analyze premium trends, coverage gaps, and underwriting challenges related to climate risks.
+                    </p>
+                    <div className="flex justify-between items-center">
+                      <div className="bg-orange-100 text-orange-800 px-2 py-1 rounded-full text-xs font-medium">
+                        Property Premiums +{premiumIncrease || '48'}%
+                      </div>
+                      <span className="text-blue-600 text-sm">View details →</span>
                     </div>
-                    <span className="text-blue-600 text-sm">View details →</span>
                   </div>
                 </div>
-             
+
                 {/* Recent Articles */}
                 <div className="bg-white rounded-lg shadow p-4">
                   <div className="flex justify-between items-center mb-4">
