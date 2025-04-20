@@ -1,7 +1,7 @@
 
 ---
 
-## 🧠 **Project: ClimateIQ – AI-Powered Climate Risk Intelligence for Insurance**
+## 🧠 **Project: InsureSmart – AI-Powered Climate Risk Intelligence for Insurance**
 
 ### 🌪️ Real-Time Climate-Aware Underwriting. For All Lines of Insurance.
 
@@ -19,7 +19,7 @@ Insurers need a unified way to assess risk **across all lines** of business—wi
 
 ---
 
-## 💡 Solution: ClimateIQ
+## 💡 Solution: InsureSmart
 
 A next-generation **climate-aware underwriting dashboard**, designed to support all 5 core insurance verticals:
 
@@ -68,22 +68,11 @@ Provide reinsurers with AI-generated, evidence-backed summaries of aggregate ris
 
 | Layer | Tech |
 |-------|------|
-| **Frontend** | React, Recharts, Tailwind, jsPDF |
+| **Frontend** | React, Recharts, Tailwind|
 | **Backend** | FastAPI, MongoDB, APScheduler |
 | **LLM Pipeline** | LangChain + Claude (Anthropic), OpenAI fallback |
 | **Deployment** | Dockerized, cloud-ready |
 
----
-
-## 📈 Hackathon Deliverables
-
-✅ AI summarization engine for underwriting risk  
-✅ Insurance-domain-specific dashboard with real-time filters  
-✅ Hazard + ESG + premium trend ingestion  
-✅ PDF report generator with export options  
-✅ Multi-tab UX with domain breakdowns  
-
----
 
 ## 👥 Ideal Users
 
@@ -98,7 +87,6 @@ Provide reinsurers with AI-generated, evidence-backed summaries of aggregate ris
 ## ✅ What’s Next
 
 - Add authenticated user roles (e.g. Broker vs Reinsurer)  
-- Real-time catastrophe feed (NOAA, NASA, Copernicus)  
 - API integrations with Guidewire, Duck Creek  
 - Premium leakage analytics  
 - Generative ESG disclosure authoring for compliance teams  
