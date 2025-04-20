@@ -36,59 +36,81 @@ const UnderwritingCoverageAnalysis = () => {
   useEffect(() => {
     fetchData();
   }, [selectedHazardType, selectedRegion]);
-
+  
   const fetchData = async () => {
     setIsLoading(true);
     setError(null);
     
     try {
-      // Fetch live hazard data
-      const hazardResponse = await fetch(`${API_BASE_URL}/hazards/active`);
-      if (!hazardResponse.ok) throw new Error('Failed to fetch hazard data');
-      const hazardResponseData = await hazardResponse.json();
+      // Fetch underwriting challenges data from actual endpoint
+      const underwritingParams = new URLSearchParams();
+      if (selectedHazardType !== 'all') underwritingParams.append('hazard_type', selectedHazardType);
+      if (selectedRegion !== 'all') underwritingParams.append('region', selectedRegion);
       
-      // Fetch underwriting challenges data
-      const underwritingResponse = await fetch(`${API_BASE_URL}/underwriting/challenges?hazard_type=${selectedHazardType}&region=${selectedRegion}`);
+      const underwritingResponse = await fetch(
+        `${API_BASE_URL}/underwriting/challenges?${underwritingParams.toString()}`
+      );
+      
       if (!underwritingResponse.ok) {
-        // If endpoint doesn't exist yet, use structured summaries endpoint as fallback
-        const fallbackResponse = await fetch(`${API_BASE_URL}/structured-summaries?domain=property&limit=20`);
-        if (!fallbackResponse.ok) throw new Error('Failed to fetch underwriting data');
-        const summaries = await fallbackResponse.json();
-        
-        // Transform summaries into underwriting challenges
-        setUnderwritingData(transformSummariesToUnderwritingData(summaries));
-      } else {
-        const underwritingResponseData = await underwritingResponse.json();
+        throw new Error(`Failed to fetch underwriting data: ${underwritingResponse.status}`);
+      }
+      
+      const underwritingResponseData = await underwritingResponse.json();
+      
+      // If we have data, use it
+      if (underwritingResponseData && underwritingResponseData.length > 0) {
         setUnderwritingData(underwritingResponseData);
+        console.log(`Loaded ${underwritingResponseData.length} underwriting challenges from API`);
+      } else {
+        // If no data, use AI to analyze structured summaries and generate challenges
+        await generateUnderwritingChallenges();
       }
       
       // Fetch coverage gap data
-      const coverageResponse = await fetch(`${API_BASE_URL}/underwriting/coverage-gaps?hazard_type=${selectedHazardType}&region=${selectedRegion}`);
+      const coverageParams = new URLSearchParams();
+      if (selectedHazardType !== 'all') coverageParams.append('hazard_type', selectedHazardType);
+      if (selectedRegion !== 'all') coverageParams.append('region', selectedRegion);
+      
+      const coverageResponse = await fetch(
+        `${API_BASE_URL}/underwriting/coverage-gaps?${coverageParams.toString()}`
+      );
+      
       if (!coverageResponse.ok) {
-        // Generate fallback coverage gap data
-        setCoverageGapData(generateFallbackCoverageGapData());
-      } else {
-        const coverageResponseData = await coverageResponse.json();
-        setCoverageGapData(coverageResponseData);
+        throw new Error(`Failed to fetch coverage gap data: ${coverageResponse.status}`);
       }
+      
+      const coverageResponseData = await coverageResponse.json();
+      setCoverageGapData(coverageResponseData);
       
       // Fetch premium trend data
       const premiumResponse = await fetch(`${API_BASE_URL}/underwriting/premium-trends`);
       if (!premiumResponse.ok) {
-        // Generate fallback premium trend data
-        setPremiumTrends(generateFallbackPremiumTrends());
-      } else {
-        const premiumResponseData = await premiumResponse.json();
-        setPremiumTrends(premiumResponseData);
+        throw new Error(`Failed to fetch premium trend data: ${premiumResponse.status}`);
       }
       
-      // Process hazard data
-      setHazardData(processHazardData(hazardResponseData));
+      const premiumResponseData = await premiumResponse.json();
+      setPremiumTrends(premiumResponseData);
+      
+      // Fetch hazard data
+      try {
+        const hazardResponse = await fetch(`${API_BASE_URL}/hazards/active`);
+        if (hazardResponse.ok) {
+          const hazardResponseData = await hazardResponse.json();
+          setHazardData(processHazardData(hazardResponseData));
+        } else {
+          // Fallback if hazards endpoint fails
+          console.warn("Hazards endpoint failed, using fallback data");
+          setHazardData(generateFallbackHazardData());
+        }
+      } catch (hazardError) {
+        console.error("Error fetching hazard data:", hazardError);
+        setHazardData(generateFallbackHazardData());
+      }
     } catch (err) {
       console.error('Error fetching data:', err);
       setError(err.message);
       
-      // Set fallback data on error
+      // Use fallback data on error
       setUnderwritingData(generateFallbackUnderwritingData());
       setCoverageGapData(generateFallbackCoverageGapData());
       setPremiumTrends(generateFallbackPremiumTrends());
@@ -97,6 +119,138 @@ const UnderwritingCoverageAnalysis = () => {
       setIsLoading(false);
     }
   };
+
+
+  
+  // Add this function to generate underwriting challenges from structured summaries
+  // using AI-powered analysis if the API endpoint doesn't have data
+const generateUnderwritingChallenges = async () => {
+  console.log("Generating underwriting challenges from structured summaries");
+  
+  try {
+    // 1. Fetch structured summaries from the API
+    const summariesResponse = await fetch(`${API_BASE_URL}/structured-summaries?limit=50`);
+    if (!summariesResponse.ok) {
+      throw new Error("Failed to fetch structured summaries");
+    }
+    
+    const summaries = await summariesResponse.json();
+    
+    if (!summaries || summaries.length === 0) {
+      throw new Error("No structured summaries available");
+    }
+    
+    console.log(`Found ${summaries.length} structured summaries to analyze`);
+    
+    // 2. Use repl to analyze the summaries and extract underwriting challenges
+    const result = await repl(`
+      // This code analyzes structured summaries to extract underwriting challenges
+      
+      // The structured summaries data
+      const summaries = ${JSON.stringify(summaries)};
+      
+      // Keywords relevant to underwriting challenges
+      const underwritingKeywords = [
+        "underwriting", "premium", "pricing", "rate", "coverage", "capacity", 
+        "risk assessment", "model", "catastrophe", "flood", "wildfire", "hurricane"
+      ];
+      
+      // Find summaries related to underwriting challenges
+      const underwritingRelatedSummaries = summaries.filter(summary => {
+        const keyEvent = summary.key_event?.toLowerCase() || '';
+        const businessImplications = summary.business_implications?.toLowerCase() || '';
+        return underwritingKeywords.some(keyword => 
+          keyEvent.includes(keyword) || businessImplications.includes(keyword)
+        );
+      });
+      
+      console.log("Found " + underwritingRelatedSummaries.length + " underwriting-related summaries");
+      
+      // Extract challenges from each relevant summary
+      const challenges = underwritingRelatedSummaries.map((summary, index) => {
+        // Determine hazard type from content
+        const content = (summary.key_event + ' ' + summary.business_implications).toLowerCase();
+        let hazardType = 'other';
+        
+        if (content.includes('flood')) hazardType = 'flood';
+        else if (content.includes('hurricane') || content.includes('cyclone')) hazardType = 'hurricane';
+        else if (content.includes('wildfire') || content.includes('fire')) hazardType = 'wildfire';
+        else if (content.includes('drought')) hazardType = 'drought';
+        else if (content.includes('storm') || content.includes('hail') || content.includes('tornado')) hazardType = 'storm';
+        
+        // Determine region
+        let region = 'global';
+        const geoFocus = summary.geographic_focus?.toLowerCase() || '';
+        
+        if (geoFocus.includes('north america') || geoFocus.includes('united states') || geoFocus.includes('canada')) {
+          region = 'north_america';
+        } else if (geoFocus.includes('europe')) {
+          region = 'europe';
+        } else if (geoFocus.includes('asia') || geoFocus.includes('australia') || geoFocus.includes('pacific')) {
+          region = 'asia_pacific';
+        } else if (geoFocus.includes('latin') || geoFocus.includes('south america')) {
+          region = 'latin_america';
+        } else if (geoFocus.includes('africa') || geoFocus.includes('middle east')) {
+          region = 'africa_middle_east';
+        }
+        
+        // Determine impact level
+        const implications = summary.business_implications?.toLowerCase() || '';
+        let impactLevel = 'Medium';
+        
+        if (implications.includes('significant') || implications.includes('severe') || 
+            implications.includes('high') || implications.includes('major')) {
+          impactLevel = 'High';
+        } else if (implications.includes('minor') || implications.includes('limited') || 
+                  implications.includes('low') || implications.includes('minimal')) {
+          impactLevel = 'Low';
+        }
+        
+        // Create challenge record
+        return {
+          id: 'summary_' + summary.id + '_' + index,
+          challenge: summary.key_event || 'Unnamed Challenge',
+          hazard_type: hazardType,
+          region: region,
+          impact_level: impactLevel,
+          business_implications: summary.business_implications || 'No details provided',
+          source: summary.source || 'Unknown',
+          date: summary.date || new Date().toISOString().split('T')[0]
+        };
+      });
+      
+      // Return the generated challenges
+      return challenges;
+    `);
+    
+    if (result && result.length > 0) {
+      console.log(`Generated ${result.length} underwriting challenges from summaries`);
+      setUnderwritingData(result);
+      
+      // Optional: You could also POST these to your backend to persist them
+      try {
+        await fetch(`${API_BASE_URL}/admin/store-underwriting-challenges`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(result),
+        });
+      } catch (storeError) {
+        console.error("Error storing generated challenges:", storeError);
+      }
+    } else {
+      // If generation failed, fall back to default data
+      setUnderwritingData(generateFallbackUnderwritingData());
+    }
+    
+  } catch (error) {
+    console.error("Error generating underwriting challenges:", error);
+    setUnderwritingData(generateFallbackUnderwritingData());
+  }
+};
+
+  
   
   // Transform structured summaries to underwriting challenges
   const transformSummariesToUnderwritingData = (summaries) => {

@@ -248,6 +248,584 @@ async def extract_esg_impacts_from_summaries(category=None):
     
     return results
 
+async def generate_regulatory_frameworks(articles: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    Generate structured regulatory framework data from articles using AI
+    
+    Args:
+        articles: List of relevant articles
+        
+    Returns:
+        List of regulatory frameworks extracted from the articles
+    """
+    logger.info(f"Generating regulatory frameworks from {len(articles)} articles")
+    
+    # Filter articles that might mention regulatory frameworks
+    regulatory_keywords = ["regulation", "framework", "disclosure", "compliance", "TCFD", 
+                           "TNFD", "SEC", "EU Taxonomy", "ESG", "SFDR", "CSRD", "ISSB"]
+    
+    # Find articles mentioning regulation
+    regulatory_articles = []
+    for article in articles:
+        content = article.get("content", "").lower() + article.get("title", "").lower()
+        if any(keyword.lower() in content for keyword in regulatory_keywords):
+            regulatory_articles.append(article)
+    
+    if not regulatory_articles:
+        logger.warning("No articles found with regulatory content")
+        return []
+    
+    # Take most relevant articles
+    regulatory_articles = sorted(
+        regulatory_articles, 
+        key=lambda x: x.get("total_relevance", 0), 
+        reverse=True
+    )[:10]  # Limit to 10 most relevant articles
+    
+    # Generate structured data using LLM
+    frameworks = []
+    for article in regulatory_articles:
+        prompt = f"""
+        Extract regulatory framework information from this article about climate risk and insurance.
+        
+        ARTICLE:
+        Title: {article.get('title', '')}
+        Date: {article.get('date', '')}
+        Content: {article.get('content', '')[:4000]}
+        
+        Extract any mentioned regulatory frameworks (like TCFD, TNFD, SFDR, SEC Climate Rule) related to climate risk disclosure, 
+        reporting requirements, or compliance that would impact insurance companies.
+        
+        For each identified regulatory framework, provide:
+        1. Name of the framework
+        2. Description of what it requires
+        3. Status (emerging, established, or proposed)
+        4. Region affected (global, north_america, europe, asia_pacific, etc.)
+        5. Relevance score (1-10) for insurance industry
+        6. Implementation date (if mentioned)
+        7. Which insurance domains are affected (property, casualty, life, health, reinsurance)
+        
+        Return ONLY valid JSON in this format (array of frameworks):
+        [
+          {
+            "name": "Framework Name",
+            "description": "Brief description",
+            "status": "emerging|established|proposed",
+            "region": "global|europe|north_america|etc",
+            "relevance_score": 8.5,
+            "implementation_date": "YYYY-MM-DD",
+            "domains_affected": ["property", "casualty", "etc"]
+          }
+        ]
+        
+        If no frameworks are mentioned, return an empty array: []
+        """
+        
+        try:
+            system_msg = SystemMessage(content="You are an expert financial regulations analyst specializing in climate risk disclosure frameworks.")
+            human_msg = HumanMessage(content=prompt)
+            
+            response = llm.invoke([system_msg, human_msg])
+            content = response.content
+            
+            # Extract JSON from response
+            json_pattern = r'```(?:json)?\s*([\s\S]*?)\s*```'
+            import re
+            json_match = re.search(json_pattern, content)
+            
+            if json_match:
+                json_str = json_match.group(1)
+            else:
+                # Try to find JSON object directly
+                json_str = content
+                
+            try:
+                extracted_frameworks = json.loads(json_str)
+                if isinstance(extracted_frameworks, list):
+                    # Add source info
+                    for framework in extracted_frameworks:
+                        framework["source_article_id"] = article.get("id", "")
+                        framework["source_article_title"] = article.get("title", "")
+                        framework["source"] = article.get("source", "")
+                        
+                    frameworks.extend(extracted_frameworks)
+                    logger.info(f"Extracted {len(extracted_frameworks)} frameworks from article: {article.get('title', '')}")
+                
+            except json.JSONDecodeError:
+                logger.error(f"Failed to parse JSON from LLM response for article: {article.get('title', '')}")
+        
+        except Exception as e:
+            logger.error(f"Error generating regulatory frameworks: {str(e)}")
+    
+    # Deduplicate frameworks by name
+    unique_frameworks = {}
+    for framework in frameworks:
+        name = framework.get("name", "").strip()
+        if name:
+            # If we already have this framework, keep the one with the higher relevance score
+            if name in unique_frameworks:
+                if framework.get("relevance_score", 0) > unique_frameworks[name].get("relevance_score", 0):
+                    unique_frameworks[name] = framework
+            else:
+                unique_frameworks[name] = framework
+    
+    result = list(unique_frameworks.values())
+    logger.info(f"Generated {len(result)} unique regulatory frameworks")
+    return result
+
+async def generate_esg_impacts(articles: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    Generate ESG impact data from articles using AI
+    
+    Args:
+        articles: List of relevant articles
+        
+    Returns:
+        List of ESG impacts extracted from the articles
+    """
+    logger.info(f"Generating ESG impacts from {len(articles)} articles")
+    
+    # Filter articles that might mention ESG topics
+    esg_keywords = ["ESG", "environmental", "social", "governance", "sustainability", 
+                   "climate justice", "biodiversity", "transition risk", "physical risk"]
+    
+    # Find articles mentioning ESG
+    esg_articles = []
+    for article in articles:
+        content = article.get("content", "").lower() + article.get("title", "").lower()
+        if any(keyword.lower() in content for keyword in esg_keywords):
+            esg_articles.append(article)
+    
+    if not esg_articles:
+        logger.warning("No articles found with ESG content")
+        return []
+    
+    # Take most relevant articles
+    esg_articles = sorted(
+        esg_articles, 
+        key=lambda x: x.get("total_relevance", 0), 
+        reverse=True
+    )[:10]  # Limit to 10 most relevant articles
+    
+    # Generate structured data using LLM
+    impacts = []
+    for article in esg_articles:
+        prompt = f"""
+        Extract ESG (Environmental, Social, Governance) impact information from this article about climate risk and insurance.
+        
+        ARTICLE:
+        Title: {article.get('title', '')}
+        Date: {article.get('date', '')}
+        Content: {article.get('content', '')[:4000]}
+        
+        Extract ESG impacts related to climate risk that would affect insurance companies.
+        Consider:
+        - Physical risks (floods, wildfires, etc.)
+        - Transition risks (policy, market changes, etc.)
+        - Social impacts (climate justice, health effects, etc.)
+        - Governance requirements (disclosure, board responsibilities, etc.)
+        
+        For each identified ESG impact, provide:
+        1. Category (E for Environmental, S for Social, G for Governance)
+        2. Name of the impact
+        3. Score (1-10) reflecting severity or importance 
+        4. Impact level (High, Medium, Low)
+        5. Description of how it affects insurance
+        6. Relevant frameworks mentioned (TCFD, TNFD, etc.)
+        7. Current trend (increasing, stable, decreasing)
+        
+        Return ONLY valid JSON in this format (array of impacts):
+        [
+          {
+            "category": "E",
+            "name": "Impact Name",
+            "score": 8.5,
+            "impact": "High|Medium|Low",
+            "description": "Brief description",
+            "relevant_frameworks": ["TCFD", "etc"],
+            "trend": "increasing|stable|decreasing"
+          }
+        ]
+        
+        If no ESG impacts are identified, return an empty array: []
+        """
+        
+        try:
+            system_msg = SystemMessage(content="You are an expert ESG analyst specializing in climate risk impacts for insurance companies.")
+            human_msg = HumanMessage(content=prompt)
+            
+            response = llm.invoke([system_msg, human_msg])
+            content = response.content
+            
+            # Extract JSON from response
+            json_pattern = r'```(?:json)?\s*([\s\S]*?)\s*```'
+            import re
+            json_match = re.search(json_pattern, content)
+            
+            if json_match:
+                json_str = json_match.group(1)
+            else:
+                # Try to find JSON object directly
+                json_str = content
+                
+            try:
+                extracted_impacts = json.loads(json_str)
+                if isinstance(extracted_impacts, list):
+                    # Add source info
+                    for impact in extracted_impacts:
+                        impact["source_article_id"] = article.get("id", "")
+                        impact["source_article_title"] = article.get("title", "")
+                        impact["source"] = article.get("source", "")
+                        
+                    impacts.extend(extracted_impacts)
+                    logger.info(f"Extracted {len(extracted_impacts)} ESG impacts from article: {article.get('title', '')}")
+                
+            except json.JSONDecodeError:
+                logger.error(f"Failed to parse JSON from LLM response for article: {article.get('title', '')}")
+        
+        except Exception as e:
+            logger.error(f"Error generating ESG impacts: {str(e)}")
+    
+    # Deduplicate impacts by category + name
+    unique_impacts = {}
+    for impact in impacts:
+        key = f"{impact.get('category', '')}-{impact.get('name', '')}".strip()
+        if key:
+            # If we already have this impact, keep the one with the higher score
+            if key in unique_impacts:
+                if impact.get("score", 0) > unique_impacts[key].get("score", 0):
+                    unique_impacts[key] = impact
+            else:
+                unique_impacts[key] = impact
+    
+    result = list(unique_impacts.values())
+    logger.info(f"Generated {len(result)} unique ESG impacts")
+    return result
+
+async def generate_underwriting_challenges(articles: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    Generate underwriting challenges data from articles using AI
+    
+    Args:
+        articles: List of relevant articles
+        
+    Returns:
+        List of underwriting challenges extracted from the articles
+    """
+    logger.info(f"Generating underwriting challenges from {len(articles)} articles")
+    
+    # Filter articles that might mention underwriting challenges
+    underwriting_keywords = ["underwriting", "premium", "pricing", "rate", "coverage", "capacity", 
+                            "risk assessment", "model", "catastrophe", "flood", "wildfire", "hurricane"]
+    
+    # Find articles mentioning underwriting
+    underwriting_articles = []
+    for article in articles:
+        content = article.get("content", "").lower() + article.get("title", "").lower()
+        if any(keyword.lower() in content for keyword in underwriting_keywords):
+            underwriting_articles.append(article)
+    
+    if not underwriting_articles:
+        logger.warning("No articles found with underwriting content")
+        return []
+    
+    # Take most relevant articles
+    underwriting_articles = sorted(
+        underwriting_articles, 
+        key=lambda x: x.get("total_relevance", 0), 
+        reverse=True
+    )[:10]  # Limit to 10 most relevant articles
+    
+    # Generate structured data using LLM
+    challenges = []
+    for article in underwriting_articles:
+        prompt = f"""
+        Extract climate-related underwriting challenges from this article about insurance.
+        
+        ARTICLE:
+        Title: {article.get('title', '')}
+        Date: {article.get('date', '')}
+        Content: {article.get('content', '')[:4000]}
+        
+        Extract specific underwriting challenges that climate risk creates for insurance companies.
+        Consider challenges related to:
+        - Risk assessment and modeling difficulties
+        - Premium pricing considerations
+        - Coverage limitations or exclusions
+        - Capacity constraints
+        - Specific climate hazards like floods, wildfires, hurricanes, etc.
+        
+        For each identified challenge, provide:
+        1. Clear description of the challenge
+        2. Related hazard type (flood, hurricane, wildfire, drought, storm, other)
+        3. Geographic region affected (north_america, europe, asia_pacific, global, etc.)
+        4. Impact level (High, Medium, Low)
+        5. Business implications for insurers
+        
+        Return ONLY valid JSON in this format (array of challenges):
+        [
+          {{
+            "challenge": "Description of the challenge",
+            "hazard_type": "flood|hurricane|wildfire|drought|storm|other",
+            "region": "north_america|europe|asia_pacific|global|etc",
+            "impact_level": "High|Medium|Low",
+            "business_implications": "Explanation of impacts"
+          }}
+        ]
+        
+        If no underwriting challenges are identified, return an empty array: []
+        """
+        
+        try:
+            system_msg = SystemMessage(content="You are an expert insurance underwriter specializing in climate risk assessment.")
+            human_msg = HumanMessage(content=prompt)
+            
+            response = llm.invoke([system_msg, human_msg])
+            content = response.content
+            
+            # Extract JSON from response
+            json_pattern = r'```(?:json)?\s*([\s\S]*?)\s*```'
+            import re
+            json_match = re.search(json_pattern, content)
+            
+            if json_match:
+                json_str = json_match.group(1)
+            else:
+                # Try to find JSON object directly
+                json_str = content
+                
+            try:
+                extracted_challenges = json.loads(json_str)
+                if isinstance(extracted_challenges, list):
+                    # Add source info and unique ID
+                    for i, challenge in enumerate(extracted_challenges):
+                        challenge["id"] = f"{article.get('id', 'article')}_{i}"
+                        challenge["source"] = article.get("source", "Unknown")
+                        challenge["date"] = article.get("date", datetime.now().strftime("%Y-%m-%d"))
+                        
+                    challenges.extend(extracted_challenges)
+                    logger.info(f"Extracted {len(extracted_challenges)} underwriting challenges from article: {article.get('title', '')}")
+                
+            except json.JSONDecodeError:
+                logger.error(f"Failed to parse JSON from LLM response for article: {article.get('title', '')}")
+        
+        except Exception as e:
+            logger.error(f"Error generating underwriting challenges: {str(e)}")
+    
+    # Return the combined list (no deduplication as challenges may be similar but distinct)
+    logger.info(f"Generated {len(challenges)} underwriting challenges")
+    return challenges
+
+
+async def generate_coverage_gaps(articles: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    Generate coverage gap data from articles using AI
+    
+    Args:
+        articles: List of relevant articles
+        
+    Returns:
+        List of coverage gap analyses extracted from the articles
+    """
+    logger.info(f"Generating coverage gap analyses from {len(articles)} articles")
+    
+    # Filter articles that might mention coverage gaps
+    coverage_keywords = ["coverage gap", "protection gap", "uninsured", "underinsured", 
+                         "economic loss", "insured loss", "take-up rate", "affordability"]
+    
+    # Find articles mentioning coverage gaps
+    coverage_articles = []
+    for article in articles:
+        content = article.get("content", "").lower() + article.get("title", "").lower()
+        if any(keyword.lower() in content for keyword in coverage_keywords):
+            coverage_articles.append(article)
+    
+    if not coverage_articles:
+        logger.warning("No articles found with coverage gap content")
+        return []
+    
+    # Take most relevant articles
+    coverage_articles = sorted(
+        coverage_articles, 
+        key=lambda x: x.get("total_relevance", 0), 
+        reverse=True
+    )[:10]  # Limit to 10 most relevant articles
+    
+    # Generate structured data using LLM
+    gaps = []
+    for article in coverage_articles:
+        prompt = f"""
+        Extract coverage gap information from this article about climate risk and insurance.
+        
+        ARTICLE:
+        Title: {article.get('title', '')}
+        Date: {article.get('date', '')}
+        Content: {article.get('content', '')[:4000]}
+        
+        Extract information about insurance coverage gaps related to climate risks.
+        Coverage gaps are the difference between economic losses and insured losses from climate events.
+        
+        For identified coverage gaps, provide:
+        1. Related hazard type (flood, hurricane, wildfire, drought, storm, other)
+        2. Geographic region affected (north_america, europe, asia_pacific, global, etc.)
+        3. Coverage gap percentage (if mentioned or can be inferred)
+        4. Economic losses in billions USD (if mentioned)
+        5. Insured losses in billions USD (if mentioned)
+        6. Trends information (gap increasing or decreasing, take-up rate changes)
+        7. Key challenges creating or maintaining this coverage gap
+        
+        Return ONLY valid JSON in this format (array of coverage gaps):
+        [
+          {{
+            "hazard_type": "flood|hurricane|wildfire|drought|storm|other",
+            "region": "north_america|europe|asia_pacific|global|etc",
+            "coverage_gap_percentage": 70,
+            "economic_losses": 42.5,
+            "insured_losses": 12.8,
+            "trends": {{
+              "gap_change": 5.0,
+              "take_up_rate": -3.0
+            }},
+            "key_challenges": [
+              "Challenge 1",
+              "Challenge 2",
+              "Challenge 3"
+            ]
+          }}
+        ]
+        
+        Where:
+        - coverage_gap_percentage is the percentage of economic losses that are uninsured
+        - gap_change is percentage points the gap has changed (positive means growing gap)
+        - take_up_rate is the percentage change in insurance adoption (negative means decreasing adoption)
+        
+        Provide realistic estimates based on industry knowledge if exact figures aren't mentioned.
+        If no coverage gap information is identified, return an empty array: []
+        """
+        
+        try:
+            system_msg = SystemMessage(content="You are an expert insurance analyst specializing in climate risk coverage gaps.")
+            human_msg = HumanMessage(content=prompt)
+            
+            response = llm.invoke([system_msg, human_msg])
+            content = response.content
+            
+            # Extract JSON from response
+            json_pattern = r'```(?:json)?\s*([\s\S]*?)\s*```'
+            import re
+            json_match = re.search(json_pattern, content)
+            
+            if json_match:
+                json_str = json_match.group(1)
+            else:
+                # Try to find JSON object directly
+                json_str = content
+                
+            try:
+                extracted_gaps = json.loads(json_str)
+                if isinstance(extracted_gaps, list):
+                    # Add source info
+                    for gap in extracted_gaps:
+                        gap["source_article_id"] = article.get("id", "")
+                        gap["source_article_title"] = article.get("title", "")
+                        gap["source"] = article.get("source", "")
+                        
+                    gaps.extend(extracted_gaps)
+                    logger.info(f"Extracted {len(extracted_gaps)} coverage gaps from article: {article.get('title', '')}")
+                
+            except json.JSONDecodeError:
+                logger.error(f"Failed to parse JSON from LLM response for article: {article.get('title', '')}")
+        
+        except Exception as e:
+            logger.error(f"Error generating coverage gaps: {str(e)}")
+    
+    # Deduplicate gaps by hazard type and region
+    unique_gaps = {}
+    for gap in gaps:
+        key = f"{gap.get('hazard_type', '')}-{gap.get('region', '')}".strip()
+        if key:
+            # If we already have this gap, keep the one with more complete information
+            if key in unique_gaps:
+                current = unique_gaps[key]
+                # Check which has more complete data
+                if (gap.get("economic_losses") and gap.get("insured_losses") and 
+                    (not current.get("economic_losses") or not current.get("insured_losses"))):
+                    unique_gaps[key] = gap
+                # Or keep the one with more recent source
+                elif (gap.get("source_article_date", "") > current.get("source_article_date", "")):
+                    unique_gaps[key] = gap
+            else:
+                unique_gaps[key] = gap
+    
+    result = list(unique_gaps.values())
+    logger.info(f"Generated {len(result)} unique coverage gaps")
+    return result
+
+# Main function to populate database with AI-generated data
+async def populate_climate_risk_data():
+    """
+    Main function to scrape news, analyze and generate structured data for the dashboard
+    """
+    logger.info("Starting comprehensive climate risk data population")
+    
+    try:
+        # Step 1: Scrape latest news
+        news_sources = scrape_news_sources.invoke({})
+        logger.info(f"Scraped {len(news_sources)} articles from news sources")
+        
+        # Step 2: Analyze insurance relevance
+        relevant_articles = analyze_insurance_relevance.invoke({"articles": news_sources})
+        logger.info(f"Found {len(relevant_articles)} relevant articles")
+        
+        # Step 3: Generate structured data for different endpoints
+        frameworks = await generate_regulatory_frameworks(relevant_articles)
+        esg_impacts = await generate_esg_impacts(relevant_articles)
+        underwriting_challenges = await generate_underwriting_challenges(relevant_articles)
+        coverage_gaps = await generate_coverage_gaps(relevant_articles)
+        
+        # Step 4: Store in database for API endpoints
+        # Regulatory frameworks
+        if frameworks:
+            # Clear existing data or use upsert
+            await db.regulatory_frameworks.delete_many({})
+            await db.regulatory_frameworks.insert_many(frameworks)
+            logger.info(f"Stored {len(frameworks)} regulatory frameworks in database")
+        
+        # ESG impacts
+        if esg_impacts:
+            # Clear existing data or use upsert
+            await db.esg_impacts.delete_many({})
+            await db.esg_impacts.insert_many(esg_impacts)
+            logger.info(f"Stored {len(esg_impacts)} ESG impacts in database")
+        
+        # Underwriting challenges
+        if underwriting_challenges:
+            # Clear existing data or use upsert
+            await db.underwriting_challenges.delete_many({})
+            await db.underwriting_challenges.insert_many(underwriting_challenges)
+            logger.info(f"Stored {len(underwriting_challenges)} underwriting challenges in database")
+        
+        # Coverage gaps
+        if coverage_gaps:
+            # Clear existing data or use upsert
+            await db.coverage_gaps.delete_many({})
+            await db.coverage_gaps.insert_many(coverage_gaps)
+            logger.info(f"Stored {len(coverage_gaps)} coverage gaps in database")
+        
+        logger.info("Successfully populated climate risk data")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Error populating climate risk data: {str(e)}")
+        return False
+
+# Schedule periodic data updates
+def schedule_data_population(scheduler):
+    """Add data population task to the scheduler"""
+    # Run daily at 3:00 AM (after the basic analysis)
+    scheduler.add_job(populate_climate_risk_data, "cron", hour=3, minute=0)
+    logger.info("Scheduled daily climate risk data population")
+
 def generate_fallback_regulatory_trends(months=6):
     """Generate fallback regulatory trend data when database queries return no results"""
     trends = []
@@ -349,7 +927,33 @@ app.add_middleware(
     allow_headers=["*"],              # Allow all headers
 )
 
+@app.post("/admin/populate-climate-data", status_code=status.HTTP_202_ACCEPTED)
+async def trigger_climate_data_population(background_tasks: BackgroundTasks):
+    """
+    Trigger the AI-powered data population process for climate risk intelligence.
+    """
+    # Run the population task in the background
+    background_tasks.add_task(populate_climate_risk_data)
+    
+    return {
+        "message": "Climate risk data population started",
+        "status": "accepted"
+    }
 
+@app.post("/admin/store-underwriting-challenges")
+async def store_underwriting_challenges(challenges: List[dict]):
+    """Store AI-generated underwriting challenges"""
+    try:
+        if challenges and len(challenges) > 0:
+            # Insert challenges into the database
+            await db.underwriting_challenges.delete_many({})  # Clear existing
+            await db.underwriting_challenges.insert_many(challenges)
+            return {"message": f"Stored {len(challenges)} underwriting challenges", "success": True}
+        return {"message": "No challenges provided", "success": False}
+    except Exception as e:
+        logger.error(f"Error storing underwriting challenges: {str(e)}")
+        return {"message": f"Error: {str(e)}", "success": False}
+    
 @app.get("/regulatory/frameworks", response_model=List[RegulatoryFramework])
 async def get_regulatory_frameworks(
     region: Optional[str] = None,
@@ -1986,6 +2590,67 @@ async def verify_report_saved(task_id):
         logger.error("Latest report was created before task started")
         return False
     
+class UnderwritingChallenge(BaseModel):
+    id: str
+    challenge: str
+    hazard_type: str
+    region: str
+    impact_level: str
+    business_implications: str
+    source: str
+    date: str
+@app.get("/underwriting/challenges", response_model=List[UnderwritingChallenge])
+async def get_underwriting_challenges(
+    hazard_type: str = "all", region: str = "all"
+):
+    """Fetch persisted underwriting challenges, filtered by hazard_type and region."""
+    try:
+        query: Dict[str, Any] = {}
+        if hazard_type != "all":
+            query["hazard_type"] = hazard_type
+        if region != "all":
+            query["region"] = region
+
+        cursor = db.underwriting_challenges.find(query).sort("date", -1)
+        docs = await cursor.to_list(length=100)
+
+        return [UnderwritingChallenge(**{
+            "id": str(doc.get("id") or doc.get("_id")),
+            "challenge": doc["challenge"],
+            "hazard_type": doc["hazard_type"],
+            "region": doc["region"],
+            "impact_level": doc["impact_level"],
+            "business_implications": doc["business_implications"],
+            "source": doc["source"],
+            "date": doc["date"]
+        }) for doc in docs]
+    except Exception as e:
+        logger.error(f"Error fetching underwriting challenges: {e}")
+        return []
+@app.post("/admin/generate-underwriting-challenges")
+async def generate_and_store_underwriting_challenges(
+    background_tasks: BackgroundTasks
+):
+    """
+    Trigger AI-powered underwriting challenge generation and store results.
+    Clients can then GET /underwriting/challenges to retrieve them.
+    """
+    # Fetch existing articles to analyze
+    articles = await db.articles.find().to_list(length=500)
+
+    # Background task to run generation and persist
+    async def _store():
+        try:
+            generated = await generate_underwriting_challenges(articles)
+            if generated:
+                await db.underwriting_challenges.delete_many({})
+                await db.underwriting_challenges.insert_many(generated)
+                logger.info(f"Stored {len(generated)} generated underwriting challenges")
+        except Exception as err:
+            logger.error(f"Error generating/storing challenges: {err}")
+
+    background_tasks.add_task(_store)
+    return {"message": "Underwriting challenge generation started"}
 
 @app.get("/underwriting/coverage-gaps", response_model=List[CoverageGapData])
 async def get_coverage_gaps(

@@ -14,6 +14,8 @@ import remarkGfm     from 'remark-gfm';
 import RiskMap from './RiskMap.jsx';
 import UnderwritingCoverageAnalysis from './Underwriting.jsx';
 import RegulatoryESGTracker from './RegulatoryESGTracker.jsx';
+import ClimateDataManagementPanel from './ClimateDataManagement';
+
 
 // API base URL - change this to match your backend URL
 const API_BASE_URL = 'http://localhost:8000';
@@ -421,10 +423,10 @@ const InsuranceClimateDashboard = () => {
       {/* Tabs */}
       <nav className="bg-white shadow-sm">
         <div className="container mx-auto px-4 flex space-x-4">
-        {['dashboard','reports','articles','domains','search','map', 'regulatory', 'underwriting'].map(tab => (
+        {['dashboard','reports','articles','domains','search','map','regulatory','underwriting','data-management'].map(tab => (
   <button
     key={tab}
-    className={`px-4 py-3 font-medium ${
+    className={`px-4 py-3 font-medium whitespace-nowrap ${
       activeTab === tab
         ? 'text-blue-600 border-b-2 border-blue-600'
         : 'text-gray-600 hover:text-blue-500'
@@ -435,6 +437,7 @@ const InsuranceClimateDashboard = () => {
      tab === 'map' ? 'Risk Map' : 
      tab === 'regulatory' ? 'Regulatory & ESG' : 
      tab === 'underwriting' ? 'Underwriting & Coverage' : 
+     tab === 'data-management' ? 'AI Data Manager' :
      tab.charAt(0).toUpperCase() + tab.slice(1)}
   </button>
 ))}
@@ -708,7 +711,11 @@ const InsuranceClimateDashboard = () => {
                 </div>
               </>
             )}
-
+            {activeTab === 'data-management' && (
+  <div className="bg-white rounded-lg shadow">
+    <ClimateDataManagementPanel />
+  </div>
+)}
             {activeTab === 'reports' && (
               <div className="bg-white rounded-lg shadow p-6">
                 <h2 className="text-2xl font-bold mb-6">
