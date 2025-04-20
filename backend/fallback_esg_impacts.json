@@ -1,0 +1,148 @@
+[
+  {
+    "category": "E",
+    "name": "Physical Risk",
+    "score": 8.5,
+    "impact": "High",
+    "description": "Increased frequency and severity of weather events affecting property insurance claims",
+    "relevant_frameworks": [
+      "TCFD",
+      "TNFD",
+      "EU Taxonomy"
+    ],
+    "trend": "increasing"
+  },
+  {
+    "category": "E",
+    "name": "Transition Risk",
+    "score": 7.2,
+    "impact": "Medium",
+    "description": "Financial impact of shift to low-carbon economy on insured businesses and investment portfolios",
+    "relevant_frameworks": [
+      "TCFD",
+      "EU Taxonomy",
+      "SEC Climate Rule"
+    ],
+    "trend": "increasing"
+  },
+  {
+    "category": "E",
+    "name": "Biodiversity Loss",
+    "score": 6.8,
+    "impact": "Medium",
+    "description": "Impact of ecosystem degradation on insurability and increased natural catastrophe risk",
+    "relevant_frameworks": [
+      "TNFD"
+    ],
+    "trend": "increasing"
+  },
+  {
+    "category": "E",
+    "name": "Resource Scarcity",
+    "score": 6.2,
+    "impact": "Medium",
+    "description": "Water scarcity and resource depletion creating new insurance exposures and investment risks",
+    "relevant_frameworks": [
+      "TNFD",
+      "EU Taxonomy"
+    ],
+    "trend": "increasing"
+  },
+  {
+    "category": "S",
+    "name": "Climate Justice",
+    "score": 6.5,
+    "impact": "Medium",
+    "description": "Addressing inequities in climate risk exposure and insurance availability in vulnerable communities",
+    "relevant_frameworks": [
+      "UN SDGs",
+      "NAIC Climate Risk Disclosure"
+    ],
+    "trend": "increasing"
+  },
+  {
+    "category": "S",
+    "name": "Health Effects",
+    "score": 5.8,
+    "impact": "Medium",
+    "description": "Climate-related health impacts affecting mortality assumptions and health insurance claims",
+    "relevant_frameworks": [
+      "TCFD",
+      "UN SDGs"
+    ],
+    "trend": "increasing"
+  },
+  {
+    "category": "S",
+    "name": "Employment Impacts",
+    "score": 5.2,
+    "impact": "Medium",
+    "description": "Job market disruption due to transition to low-carbon economy affecting workers' compensation and liability insurance",
+    "relevant_frameworks": [
+      "ISSB",
+      "SEC Climate Rule"
+    ],
+    "trend": "increasing"
+  },
+  {
+    "category": "S",
+    "name": "Population Displacement",
+    "score": 5.5,
+    "impact": "Medium",
+    "description": "Climate-driven migration and displacement creating new insurance needs and liabilities",
+    "relevant_frameworks": [
+      "UN SDGs"
+    ],
+    "trend": "increasing"
+  },
+  {
+    "category": "G",
+    "name": "Climate Risk Governance",
+    "score": 8.0,
+    "impact": "High",
+    "description": "Board oversight and management accountability for climate risk strategy and disclosure",
+    "relevant_frameworks": [
+      "TCFD",
+      "ISSB",
+      "SEC Climate Rule"
+    ],
+    "trend": "increasing"
+  },
+  {
+    "category": "G",
+    "name": "Disclosure Requirements",
+    "score": 7.8,
+    "impact": "High",
+    "description": "Increasing regulatory pressure to disclose climate-related financial risks and opportunities",
+    "relevant_frameworks": [
+      "TCFD",
+      "SEC Climate Rule",
+      "EU SFDR"
+    ],
+    "trend": "increasing"
+  },
+  {
+    "category": "G",
+    "name": "Climate Litigation Risk",
+    "score": 7.0,
+    "impact": "Medium",
+    "description": "Increasing risk of litigation related to climate change affecting D&O and liability insurance",
+    "relevant_frameworks": [
+      "TCFD",
+      "SEC Climate Rule"
+    ],
+    "trend": "increasing"
+  },
+  {
+    "category": "G",
+    "name": "Climate Strategy Integration",
+    "score": 6.5,
+    "impact": "Medium",
+    "description": "Insurance companies integrating climate risks into long-term business strategy and product development",
+    "relevant_frameworks": [
+      "TCFD",
+      "ISSB"
+    ],
+    "trend": "increasing"
+  }
+]

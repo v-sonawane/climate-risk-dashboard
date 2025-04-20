@@ -15,7 +15,7 @@ import RiskMap from './RiskMap.jsx';
 import UnderwritingCoverageAnalysis from './Underwriting.jsx';
 import RegulatoryESGTracker from './RegulatoryESGTracker.jsx';
 import ClimateDataManagementPanel from './ClimateDataManagement';
-
+import EnterpriseReportSection from './Reports.jsx';
 
 // API base URL - change this to match your backend URL
 const API_BASE_URL = 'http://localhost:8000';
@@ -404,7 +404,7 @@ const InsuranceClimateDashboard = () => {
       {/* Header */}
       <header className="bg-gradient-to-r from-blue-800 to-indigo-800 text-white shadow-md">
         <div className="container mx-auto px-4 py-4 flex justify-between items-center">
-          <h1 className="text-2xl font-bold">Climate Risk Intelligence</h1>
+          <h1 className="text-2xl font-bold">PoliSure</h1>
           <div className="flex space-x-2">
             <button
               className="px-3 py-1 bg-blue-700 rounded-md hover:bg-blue-600"
@@ -717,75 +717,10 @@ const InsuranceClimateDashboard = () => {
   </div>
 )}
             {activeTab === 'reports' && (
-              <div className="bg-white rounded-lg shadow p-6">
-                <h2 className="text-2xl font-bold mb-6">
-                  Climate Risk Intelligence Report
-                </h2>
-                <div
-                  ref={reportRef}
-                  className="bg-white p-8 border border-gray-300 rounded-lg space-y-8 mx-auto"
-                  style={{ maxWidth: '800px' }}
-                >
-                  <div>
-                    <h3 className="text-lg font-semibold mb-2">Executive Summary</h3>
-                    <p className="text-gray-600">{reportData.executive_summary}</p>
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-semibold mb-2">
-                      Key Climate Risk Developments
-                    </h3>
-                    <div
-                      className="prose"
-                      dangerouslySetInnerHTML={{
-                        __html: formatMarkdownText(reportData.key_developments)
-                      }}
-                    />
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-semibold mb-2">
-                      Insurance Domain Impacts
-                    </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {activeDomains.map(([domain, txt]) => (
-                        <div
-                          key={domain}
-                          className="p-4 border rounded-lg bg-gray-50"
-                        >
-                          <h4 className="font-medium capitalize mb-1">
-                            {domain} Insurance
-                          </h4>
-                          <p className="text-gray-700 text-sm">{txt}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-semibold mb-2">
-                      Recommended Actions
-                    </h3>
-                    <div
-                      className="prose"
-                      dangerouslySetInnerHTML={{
-                        __html: formatMarkdownText(
-                          reportData.recommended_actions
-                        )
-                      }}
-                    />
-                  </div>
-                </div>
-                <div className="mt-6 flex justify-end space-x-2">
-                  <button
-                    onClick={downloadReportAsPDF}
-                    className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
-                  >
-                    Download PDF
-                  </button>
-                  <button className="bg-gray-600 text-white px-4 py-2 rounded-md hover:bg-gray-700">
-                    Share Report
-                  </button>
-                </div>
-              </div>
-            )}
+  <div className="bg-white rounded-lg shadow">
+    <EnterpriseReportSection />
+  </div>
+)}
           {activeTab === 'regulatory' && (
             <div className="bg-white rounded-lg shadow p-4">
               <h2 className="text-xl font-semibold mb-4">Regulatory & ESG Intelligence</h2>
@@ -845,7 +780,7 @@ const InsuranceClimateDashboard = () => {
 
       <footer className="bg-gray-800 text-white py-4">
         <div className="container mx-auto px-4 flex justify-between items-center">
-          <p className="text-sm">© 2025 Climate Risk Intelligence Platform</p>
+          <p className="text-sm">© 2025 Polisure Platform</p>
           <div className="flex space-x-4">
             <a href="#" className="text-sm text-gray-300 hover:text-white">Terms</a>
             <a href="#" className="text-sm text-gray-300 hover:text-white">Privacy</a>

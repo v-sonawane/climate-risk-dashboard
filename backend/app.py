@@ -1,5 +1,5 @@
 # app.py - FIXED VERSION
-from fastapi import FastAPI, HTTPException, Depends, BackgroundTasks, Query, status, Path, APIRouter
+from fastapi import FastAPI, HTTPException, Depends, BackgroundTasks, Query, status, Path, APIRouter, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Dict, Any, Optional, Union
 from pydantic import BaseModel, Field, field_serializer
@@ -23,7 +23,7 @@ import ast
 from langchain_core.messages import SystemMessage, HumanMessage
 from fastapi.middleware.cors import CORSMiddleware
 import httpx
-
+import uuid
 # … after: app = FastAPI(...)
 origins = [
     "http://localhost:5173",
@@ -50,12 +50,14 @@ class RegulatoryFramework(BaseModel):
 
 
 class RegulatoryTrend(BaseModel):
-    month: str
+    """Model for regulatory trends data"""
+    month: str 
     property: int
     casualty: int
     life: int
     health: int
     reinsurance: int
+    created_at: Optional[datetime] = None
 
 
 class ESGImpact(BaseModel):
@@ -247,7 +249,6 @@ async def extract_esg_impacts_from_summaries(category=None):
     results.sort(key=lambda x: x["score"], reverse=True)
     
     return results
-
 async def generate_regulatory_frameworks(articles: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
     Generate structured regulatory framework data from articles using AI
@@ -832,21 +833,18 @@ def generate_fallback_regulatory_trends(months=6):
     current_month = datetime.now()
     
     for i in range(months):
-        month_date = current_month - timedelta(days=30 * i)
+        month_date = current_month - timedelta(days=30 * (months - i - 1))
         month_str = month_date.strftime("%Y-%m")
         
         # Generate realistic trend data with property and casualty having higher regulatory impact
         trends.append({
             "month": month_str,
-            "property": 25 - i * 2,
-            "casualty": 20 - i * 2,
-            "life": 10 - i,
-            "health": 12 - i,
-            "reinsurance": 18 - i * 2
+            "property": 25 - ((months - i - 1) * 2),
+            "casualty": 20 - ((months - i - 1) * 2),
+            "life": 10 - ((months - i - 1)),
+            "health": 12 - ((months - i - 1)),
+            "reinsurance": 18 - ((months - i - 1) * 2)
         })
-    
-    # Sort by month (ascending)
-    trends.sort(key=lambda x: x["month"])
     
     return trends
 
@@ -953,8 +951,97 @@ async def store_underwriting_challenges(challenges: List[dict]):
     except Exception as e:
         logger.error(f"Error storing underwriting challenges: {str(e)}")
         return {"message": f"Error: {str(e)}", "success": False}
+
+def get_default_frameworks(region=None, status=None, min_relevance=None):
+    """Return default frameworks data when real data isn't available"""
+    default_frameworks = [
+        {
+            "name": "TCFD",
+            "description": "Task Force on Climate-related Financial Disclosures - Framework for climate-related financial risk disclosures",
+            "status": "established",
+            "region": "global",
+            "relevance_score": 9.5,
+            "implementation_date": "2017-06-29",
+            "url": "https://www.fsb-tcfd.org/",
+            "domains_affected": ["property", "casualty", "life", "health", "reinsurance"]
+        },
+        {
+            "name": "TNFD",
+            "description": "Taskforce on Nature-related Financial Disclosures - Framework for nature-related risk management",
+            "status": "emerging",
+            "region": "global",
+            "relevance_score": 8.7,
+            "implementation_date": "2023-09-18",
+            "url": "https://tnfd.global/",
+            "domains_affected": ["property", "casualty", "reinsurance"]
+        },
+        {
+            "name": "EU Taxonomy",
+            "description": "European Union classification system establishing environmentally sustainable economic activities",
+            "status": "established",
+            "region": "europe",
+            "relevance_score": 8.3,
+            "implementation_date": "2022-01-01",
+            "url": "https://finance.ec.europa.eu/sustainable-finance/tools-and-standards/eu-taxonomy-sustainable-activities_en",
+            "domains_affected": ["property", "casualty", "life", "health", "reinsurance"]
+        },
+        {
+            "name": "SFDR",
+            "description": "Sustainable Finance Disclosure Regulation - EU regulation on sustainability-related disclosures",
+            "status": "established",
+            "region": "europe",
+            "relevance_score": 7.9,
+            "implementation_date": "2021-03-10",
+            "url": "https://www.esma.europa.eu/",
+            "domains_affected": ["property", "life", "reinsurance"]
+        },
+        {
+            "name": "SEC Climate Rule",
+            "description": "SEC climate disclosure requirements for public companies in the United States",
+            "status": "emerging",
+            "region": "north_america",
+            "relevance_score": 8.4,
+            "implementation_date": "2024-01-15",
+            "url": "https://www.sec.gov/",
+            "domains_affected": ["property", "casualty", "reinsurance"]
+        },
+        {
+            "name": "NAIC Climate Risk Disclosure Survey",
+            "description": "U.S. state insurance regulators' climate risk disclosure requirements",
+            "status": "established",
+            "region": "north_america",
+            "relevance_score": 7.2,
+            "implementation_date": "2020-01-01",
+            "url": "https://www.naic.org/",
+            "domains_affected": ["property", "casualty", "life"]
+        },
+        {
+            "name": "ISSB Standards",
+            "description": "International Sustainability Standards Board disclosure standards",
+            "status": "emerging",
+            "region": "global",
+            "relevance_score": 8.1,
+            "implementation_date": "2024-01-01",
+            "url": "https://www.ifrs.org/issb/",
+            "domains_affected": ["property", "casualty", "life", "health", "reinsurance"]
+        }
+    ]
     
-@app.get("/regulatory/frameworks", response_model=List[RegulatoryFramework])
+    # Apply filters to default data
+    filtered = default_frameworks
+    
+    if region and region != "global":
+        filtered = [f for f in filtered if f["region"] == region]
+        
+    if status:
+        filtered = [f for f in filtered if f["status"] == status]
+        
+    if min_relevance:
+        filtered = [f for f in filtered if f["relevance_score"] >= min_relevance]
+        
+    return filtered
+
+@app.get("/regulatory/frameworks")
 async def get_regulatory_frameworks(
     region: Optional[str] = None,
     status: Optional[str] = None,
@@ -963,6 +1050,14 @@ async def get_regulatory_frameworks(
     """
     Get regulatory frameworks relevant to climate risk in insurance.
     Filter by region, status, and minimum relevance score.
+    
+    Args:
+        region: Geographic region (global, europe, north_america, etc.)
+        status: Framework status (established, emerging, proposed)
+        min_relevance: Minimum relevance score (1-10)
+        
+    Returns:
+        List of regulatory frameworks matching the filter criteria
     """
     try:
         query = {}
@@ -990,100 +1085,24 @@ async def get_regulatory_frameworks(
                 
             return frameworks
         else:
-            # Return default frameworks as the collection is empty
-            return [
-                {
-                    "name": "TCFD",
-                    "description": "Task Force on Climate-related Financial Disclosures - Framework for climate-related financial risk disclosures",
-                    "status": "established",
-                    "region": "global",
-                    "relevance_score": 9.5,
-                    "implementation_date": "2017-06-29",
-                    "url": "https://www.fsb-tcfd.org/",
-                    "domains_affected": ["property", "casualty", "life", "health", "reinsurance"]
-                },
-                {
-                    "name": "TNFD",
-                    "description": "Taskforce on Nature-related Financial Disclosures - Framework for nature-related risk management",
-                    "status": "emerging",
-                    "region": "global",
-                    "relevance_score": 8.7,
-                    "implementation_date": "2023-09-18",
-                    "url": "https://tnfd.global/",
-                    "domains_affected": ["property", "casualty", "reinsurance"]
-                },
-                {
-                    "name": "EU Taxonomy",
-                    "description": "European Union classification system establishing environmentally sustainable economic activities",
-                    "status": "established",
-                    "region": "europe",
-                    "relevance_score": 8.3,
-                    "implementation_date": "2022-01-01",
-                    "url": "https://finance.ec.europa.eu/sustainable-finance/tools-and-standards/eu-taxonomy-sustainable-activities_en",
-                    "domains_affected": ["property", "casualty", "life", "health", "reinsurance"]
-                },
-                {
-                    "name": "SFDR",
-                    "description": "Sustainable Finance Disclosure Regulation - EU regulation on sustainability-related disclosures",
-                    "status": "established",
-                    "region": "europe",
-                    "relevance_score": 7.9,
-                    "implementation_date": "2021-03-10",
-                    "url": "https://www.esma.europa.eu/",
-                    "domains_affected": ["property", "life", "reinsurance"]
-                },
-                {
-                    "name": "SEC Climate Rule",
-                    "description": "SEC climate disclosure requirements for public companies in the United States",
-                    "status": "emerging",
-                    "region": "north_america",
-                    "relevance_score": 8.4,
-                    "implementation_date": "2024-01-15",
-                    "url": "https://www.sec.gov/",
-                    "domains_affected": ["property", "casualty", "reinsurance"]
-                },
-                {
-                    "name": "NAIC Climate Risk Disclosure Survey",
-                    "description": "U.S. state insurance regulators' climate risk disclosure requirements",
-                    "status": "established",
-                    "region": "north_america",
-                    "relevance_score": 7.2,
-                    "implementation_date": "2020-01-01",
-                    "url": "https://www.naic.org/",
-                    "domains_affected": ["property", "casualty", "life"]
-                },
-                {
-                    "name": "ISSB Standards",
-                    "description": "International Sustainability Standards Board disclosure standards",
-                    "status": "emerging",
-                    "region": "global",
-                    "relevance_score": 8.1,
-                    "implementation_date": "2024-01-01",
-                    "url": "https://www.ifrs.org/issb/",
-                    "domains_affected": ["property", "casualty", "life", "health", "reinsurance"]
-                }
-            ]
+            # If collection is empty, extract from structured summaries
+            try:
+                # This function should be defined elsewhere in your code
+                frameworks = await extract_regulatory_frameworks_from_summaries(
+                    region=region, 
+                    status=status, 
+                    min_relevance=min_relevance
+                )
+                return frameworks
+            except Exception as extract_error:
+                logger.error(f"Error extracting frameworks from summaries: {str(extract_error)}")
+                # Fall back to default frameworks data
+                return get_default_frameworks(region, status, min_relevance)
     except Exception as e:
         logger.error(f"Error fetching regulatory frameworks: {str(e)}")
-        # Return minimal data in case of error
-        return [
-            {
-                "name": "TCFD",
-                "description": "Task Force on Climate-related Financial Disclosures",
-                "status": "established",
-                "region": "global",
-                "relevance_score": 9.5,
-                "domains_affected": ["property", "casualty", "life", "health", "reinsurance"]
-            },
-            {
-                "name": "TNFD",
-                "description": "Taskforce on Nature-related Financial Disclosures",
-                "status": "emerging",
-                "region": "global",
-                "relevance_score": 8.7,
-                "domains_affected": ["property", "casualty", "reinsurance"]
-            }
-        ]
+        # Return default frameworks as fallback
+        return get_default_frameworks(region, status, min_relevance)
+    
 # MongoDB configuration
 MONGODB_URL = os.getenv("MONGODB_URL", "mongodb://localhost:27017")
 database_name = "climate_risk_intelligence"
@@ -1378,10 +1397,40 @@ async def semantic_search_structured_summaries(request: VectorSearchRequest):
 async def get_regulatory_trends(months: int = 6):
     """
     Get trends of regulatory mentions in articles by insurance domain over time.
+    
+    Args:
+        months: Number of months to include in the trend analysis
+    
+    Returns:
+        List of monthly data points with regulatory mentions by insurance domain
     """
     try:
-        # In a production environment, this would query actual data from your database
-        # For now, we'll return realistic dummy data
+        # First, check if we have data in the regulatory_trends collection
+        count = await db.regulatory_trends.count_documents({})
+        
+        if count > 0:
+            # If we have data in the collection, use it
+            trends = []
+            # Get data for the requested number of months, sorted by month
+            cursor = db.regulatory_trends.find().sort("month", -1).limit(months)
+            
+            async for doc in cursor:
+                trends.append({
+                    "month": doc["month"],
+                    "property": doc["property"],
+                    "casualty": doc["casualty"],
+                    "life": doc["life"],
+                    "health": doc["health"],
+                    "reinsurance": doc["reinsurance"]
+                })
+                
+            # Sort by month (ascending)
+            trends.sort(key=lambda x: x["month"])
+            
+            return trends
+        
+        # If no data in collection, generate fallback
+        # Generate realistic trend data
         current_month = datetime.now()
         trends = []
         
@@ -1389,34 +1438,21 @@ async def get_regulatory_trends(months: int = 6):
             month_date = current_month - timedelta(days=30 * (months - i - 1))
             month_str = month_date.strftime("%Y-%m")
             
-            # Increasing trend for property and casualty, moderate for others
-            property_val = 23 + i * 2
-            casualty_val = 18 + i * 2
-            life_val = 7 + i * 1
-            health_val = 10 + i * 1
-            reinsurance_val = 20 + i * 2
-            
+            # Generate realistic trend data
             trends.append({
                 "month": month_str,
-                "property": property_val,
-                "casualty": casualty_val,
-                "life": life_val,
-                "health": health_val,
-                "reinsurance": reinsurance_val
+                "property": 23 + i * 2,  # Increasing trend
+                "casualty": 18 + i * 2,
+                "life": 7 + i,
+                "health": 10 + i,
+                "reinsurance": 20 + i * 2
             })
         
         return trends
     except Exception as e:
         logger.error(f"Error fetching regulatory trends: {str(e)}")
-        return [
-            {"month": "2023-11", "property": 23, "casualty": 18, "life": 7, "health": 10, "reinsurance": 20},
-            {"month": "2023-12", "property": 25, "casualty": 20, "life": 8, "health": 11, "reinsurance": 22},
-            {"month": "2024-01", "property": 27, "casualty": 22, "life": 9, "health": 12, "reinsurance": 24}, 
-            {"month": "2024-02", "property": 29, "casualty": 24, "life": 10, "health": 13, "reinsurance": 26},
-            {"month": "2024-03", "property": 31, "casualty": 26, "life": 11, "health": 14, "reinsurance": 28},
-            {"month": "2024-04", "property": 33, "casualty": 28, "life": 12, "health": 15, "reinsurance": 30}
-        ]
-
+        # Fall back to completely generated data
+        return generate_fallback_regulatory_trends(months)
 
 # Update startup event to schedule indexing
 @app.on_event("startup")
@@ -1434,6 +1470,7 @@ async def startup_event():
     await db.regulatory_frameworks.create_index("relevance_score")
     await db.esg_impacts.create_index([("category", 1), ("name", 1)], unique=True)
     await db.esg_impacts.create_index("score")
+    await db.regulatory_trends.create_index("month", unique=True)
     
     # Schedule vector index maintenance
     async def update_vector_indexes():
@@ -3068,12 +3105,111 @@ class SummaryRequest(BaseModel):
 class SummaryResponse(BaseModel):
     summary: str
 
-@app.get("/regulatory/esg-impacts", response_model=List[ESGImpact])
+def get_default_esg_impacts(category=None):
+    """Return default ESG impacts data when real data isn't available"""
+    all_impacts = [
+        {
+            "category": "E",
+            "name": "Physical Risk",
+            "score": 8.5,
+            "impact": "High",
+            "description": "Increased frequency and severity of weather events affecting property insurance claims",
+            "relevant_frameworks": ["TCFD", "TNFD", "EU Taxonomy"],
+            "trend": "increasing"
+        },
+        {
+            "category": "E",
+            "name": "Transition Risk",
+            "score": 7.2,
+            "impact": "Medium",
+            "description": "Financial impact of shift to low-carbon economy on insured businesses and investment portfolios",
+            "relevant_frameworks": ["TCFD", "EU Taxonomy", "SEC Climate Rule"],
+            "trend": "increasing"
+        },
+        {
+            "category": "E",
+            "name": "Biodiversity Loss",
+            "score": 6.8,
+            "impact": "Medium",
+            "description": "Impact of ecosystem degradation on insurability and increased natural catastrophe risk",
+            "relevant_frameworks": ["TNFD"],
+            "trend": "increasing"
+        },
+        {
+            "category": "S",
+            "name": "Climate Justice",
+            "score": 6.5,
+            "impact": "Medium",
+            "description": "Addressing inequities in climate risk exposure and insurance availability in vulnerable communities",
+            "relevant_frameworks": ["UN SDGs", "NAIC Climate Risk Disclosure"],
+            "trend": "increasing"
+        },
+        {
+            "category": "S",
+            "name": "Health Effects",
+            "score": 5.8,
+            "impact": "Medium",
+            "description": "Climate-related health impacts affecting mortality assumptions and health insurance claims",
+            "relevant_frameworks": ["TCFD", "UN SDGs"],
+            "trend": "increasing"
+        },
+        {
+            "category": "S",
+            "name": "Employment Impacts",
+            "score": 5.2,
+            "impact": "Medium",
+            "description": "Job market disruption due to transition to low-carbon economy affecting workers' compensation and liability insurance",
+            "relevant_frameworks": ["ISSB", "SEC Climate Rule"],
+            "trend": "increasing"
+        },
+        {
+            "category": "G",
+            "name": "Climate Risk Governance",
+            "score": 8.0,
+            "impact": "High",
+            "description": "Board oversight and management accountability for climate risk strategy and disclosure",
+            "relevant_frameworks": ["TCFD", "ISSB", "SEC Climate Rule"],
+            "trend": "increasing"
+        },
+        {
+            "category": "G",
+            "name": "Disclosure Requirements",
+            "score": 7.8,
+            "impact": "High",
+            "description": "Increasing regulatory pressure to disclose climate-related financial risks and opportunities",
+            "relevant_frameworks": ["TCFD", "SEC Climate Rule", "EU SFDR"],
+            "trend": "increasing"
+        },
+        {
+            "category": "G",
+            "name": "Climate Litigation Risk",
+            "score": 7.0,
+            "impact": "Medium",
+            "description": "Increasing risk of litigation related to climate change affecting D&O and liability insurance",
+            "relevant_frameworks": ["TCFD", "SEC Climate Rule"],
+            "trend": "increasing"
+        }
+    ]
+    
+    # Filter by category if specified
+    if category:
+        return [impact for impact in all_impacts if impact["category"] == category]
+    
+    return all_impacts
+
+
+@app.get("/regulatory/esg-impacts")
 async def get_esg_impacts(
     category: Optional[str] = None  # 'E', 'S', or 'G'
 ):
     """
     Get ESG impacts related to climate risk for insurance companies.
+    
+    Args:
+        category: Filter by ESG category (E, S, or G)
+        
+    Returns:
+        List of ESG impacts, optionally filtered by category
     """
     try:
         query = {}
@@ -3093,118 +3229,19 @@ async def get_esg_impacts(
                 
             return impacts
         else:
-            # Return default ESG impacts as the collection is empty
-            all_impacts = [
-                {
-                    "category": "E",
-                    "name": "Physical Risk",
-                    "score": 8.5,
-                    "impact": "High",
-                    "description": "Increased frequency and severity of weather events affecting property insurance claims",
-                    "relevant_frameworks": ["TCFD", "TNFD", "EU Taxonomy"],
-                    "trend": "increasing"
-                },
-                {
-                    "category": "E",
-                    "name": "Transition Risk",
-                    "score": 7.2,
-                    "impact": "Medium",
-                    "description": "Financial impact of shift to low-carbon economy on insured businesses and investment portfolios",
-                    "relevant_frameworks": ["TCFD", "EU Taxonomy", "SEC Climate Rule"],
-                    "trend": "increasing"
-                },
-                {
-                    "category": "E",
-                    "name": "Biodiversity Loss",
-                    "score": 6.8,
-                    "impact": "Medium",
-                    "description": "Impact of ecosystem degradation on insurability and increased natural catastrophe risk",
-                    "relevant_frameworks": ["TNFD"],
-                    "trend": "increasing"
-                },
-                {
-                    "category": "S",
-                    "name": "Climate Justice",
-                    "score": 6.5,
-                    "impact": "Medium",
-                    "description": "Addressing inequities in climate risk exposure and insurance availability in vulnerable communities",
-                    "relevant_frameworks": ["UN SDGs", "NAIC Climate Risk Disclosure"],
-                    "trend": "increasing"
-                },
-                {
-                    "category": "S",
-                    "name": "Health Effects",
-                    "score": 5.8,
-                    "impact": "Medium",
-                    "description": "Climate-related health impacts affecting mortality assumptions and health insurance claims",
-                    "relevant_frameworks": ["TCFD", "UN SDGs"],
-                    "trend": "increasing"
-                },
-                {
-                    "category": "S",
-                    "name": "Employment Impacts",
-                    "score": 5.2,
-                    "impact": "Medium",
-                    "description": "Job market disruption due to transition to low-carbon economy affecting workers' compensation and liability insurance",
-                    "relevant_frameworks": ["ISSB", "SEC Climate Rule"],
-                    "trend": "increasing"
-                },
-                {
-                    "category": "G",
-                    "name": "Climate Risk Governance",
-                    "score": 8.0,
-                    "impact": "High",
-                    "description": "Board oversight and management accountability for climate risk strategy and disclosure",
-                    "relevant_frameworks": ["TCFD", "ISSB", "SEC Climate Rule"],
-                    "trend": "increasing"
-                },
-                {
-                    "category": "G",
-                    "name": "Disclosure Requirements",
-                    "score": 7.8,
-                    "impact": "High",
-                    "description": "Increasing regulatory pressure to disclose climate-related financial risks and opportunities",
-                    "relevant_frameworks": ["TCFD", "SEC Climate Rule", "EU SFDR"],
-                    "trend": "increasing"
-                },
-                {
-                    "category": "G",
-                    "name": "Climate Litigation Risk",
-                    "score": 7.0,
-                    "impact": "Medium",
-                    "description": "Increasing risk of litigation related to climate change affecting D&O and liability insurance",
-                    "relevant_frameworks": ["TCFD", "SEC Climate Rule"],
-                    "trend": "increasing"
-                }
-            ]
-            
-            # Filter by category if specified
-            if category:
-                return [impact for impact in all_impacts if impact["category"] == category]
-            return all_impacts
+            # If collection is empty, extract from structured summaries
+            try:
+                # This function should be defined elsewhere in your code
+                impacts = await extract_esg_impacts_from_summaries(category=category)
+                return impacts
+            except Exception as extract_error:
+                logger.error(f"Error extracting ESG impacts from summaries: {str(extract_error)}")
+                # Fall back to default ESG impacts data
+                return get_default_esg_impacts(category)
     except Exception as e:
         logger.error(f"Error fetching ESG impacts: {str(e)}")
-        # Return minimal data in case of error
-        return [
-            {
-                "category": "E",
-                "name": "Physical Risk",
-                "score": 8.5,
-                "impact": "High",
-                "description": "Increased frequency and severity of weather events",
-                "relevant_frameworks": ["TCFD", "TNFD"],
-                "trend": "increasing"
-            },
-            {
-                "category": "G",
-                "name": "Disclosure Requirements",
-                "score": 7.8,
-                "impact": "High",
-                "description": "Regulatory pressure to disclose climate risks",
-                "relevant_frameworks": ["TCFD", "SEC Climate Rule"],
-                "trend": "increasing"
-            }
-        ]
+        # Return default ESG impacts as fallback
+        return get_default_esg_impacts(category)
 
 # Models for Underwriting Challenges endpoints
 class UnderwritingChallenge(BaseModel):
@@ -4227,6 +4264,422 @@ async def get_emerging_trends():
     return sorted_trends[:10]
 
 
+
+class FloodRiskScore(BaseModel):
+    address: str
+    latitude: float
+    longitude: float
+    river_discharge: float
+    discharge_max: float
+    flood_warning_level: str
+    flood_probability: float
+    recommended_premium_factor: float
+    pricing_note: str
+
+def classify_river_risk(discharge: float) -> tuple[str, float, float, str]:
+    if discharge < 200:
+        return "Low", 0.1, 1.0, "Minimal risk from current discharge."
+    elif discharge < 800:
+        return "Medium", 0.5, 1.15, "Moderate discharge; monitor and apply buffer."
+    else:
+        return "High", 0.85, 1.35, "High discharge – flood possible."
+
+@app.get("/underwriting/flood-risk", response_model=FloodRiskScore)
+async def get_flood_risk(
+    lat: float = Query(...),
+    lon: float = Query(...)
+):
+    try:
+        url = (
+            f"https://flood-api.open-meteo.com/v1/flood?"
+            f"latitude={lat}&longitude={lon}&daily=river_discharge,river_discharge_max"
+        )
+        async with httpx.AsyncClient() as client:
+            res = await client.get(url)
+            res.raise_for_status()
+
+        data = res.json()
+        daily_data = data.get("daily", {})
+        discharges = daily_data.get("river_discharge", [])
+        max_discharges = daily_data.get("river_discharge_max", [])
+
+        if not discharges or not max_discharges:
+            raise ValueError("No river discharge data available.")
+
+        # Use the first forecasted day
+        discharge_today = discharges[0]
+        discharge_max_today = max_discharges[0]
+
+        warning, probability, factor, note = classify_river_risk(discharge_today)
+
+        return FloodRiskScore(
+            address=f"Lat {lat:.2f}, Lon {lon:.2f}",
+            latitude=lat,
+            longitude=lon,
+            river_discharge=discharge_today,
+            discharge_max=discharge_max_today,
+            flood_warning_level=warning,
+            flood_probability=probability,
+            recommended_premium_factor=factor,
+            pricing_note=note
+        )
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Flood API error: {str(e)}")
+
+class TrackedProperty(BaseModel):
+    id: str
+    name: str
+    address: str
+    latitude: float
+    longitude: float
+    notes: Optional[str] = None
+    created_at: Optional[datetime] = None
+
+
+@app.post("/properties")
+async def create_property(property_data: dict):
+    try:
+        # If an ID is provided, convert it to _id
+        if "id" in property_data:
+            property_id = property_data.pop("id")
+            property_data["_id"] = property_id
+            
+        result = await db.tracked_properties.insert_one(property_data)
+        
+        return {"id": str(result.inserted_id), "success": True}
+    except Exception as e:
+        print(f"Error creating property: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
+@app.get("/properties")
+async def get_properties():
+    try:
+        properties = []
+        cursor = db.tracked_properties.find()
+        
+        async for doc in cursor:
+            # Convert _id to string
+            properties.append(document_helper(doc))
+            
+        return properties
+    except Exception as e:
+        print(f"Error fetching properties: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
+
+
+from bson.errors import InvalidId
+
+@app.delete("/properties/{property_id}")
+async def delete_property(property_id: str):
+    # 1) convert the string into an ObjectId
+    try:
+        obj_id = ObjectId(property_id)
+    except InvalidId:
+        raise HTTPException(status_code=400, detail="Invalid property ID")
+
+    # 2) perform the delete
+    try:
+        result = await db.tracked_properties.delete_one({"_id": obj_id})
+        if result.deleted_count == 0:
+            # no matching document
+            raise HTTPException(status_code=404, detail="Property not found")
+        return {"success": True}
+    except Exception as e:
+        print(f"Error deleting property: {e}")
+        raise HTTPException(status_code=500, detail="Database error")
+
+    
+@app.get("/geocode")
+async def geocode_address(address: str):
+    try:
+        async with httpx.AsyncClient() as client:
+            # Use OpenStreetMap Nominatim API for geocoding
+            url = "https://nominatim.openstreetmap.org/search"
+            params = {
+                "q": address,
+                "format": "json",
+                "limit": 1
+            }
+            headers = {
+                "User-Agent": "ClimateRiskIntelligence/1.0 (contact@example.com)"
+            }
+            
+            response = await client.get(url, params=params, headers=headers)
+            
+            if response.status_code != 200:
+                raise HTTPException(status_code=500, detail="Geocoding service error")
+                
+            data = response.json()
+            
+            if not data:
+                # Return default coordinates with an indication they're fallbacks
+                return {
+                    "latitude": 33.7490,
+                    "longitude": -84.3880,
+                    "display_name": address,
+                    "is_fallback": True
+                }
+            
+            result = data[0]
+            return {
+                "latitude": float(result["lat"]),
+                "longitude": float(result["lon"]),
+                "display_name": result["display_name"],
+                "is_fallback": False
+            }
+    except Exception as e:
+        print(f"Geocoding error: {str(e)}")
+        # Fallback coordinates (Atlanta)
+        return {
+            "latitude": 33.7490,
+            "longitude": -84.3880,
+            "display_name": address,
+            "is_fallback": True
+        }
+
+@app.post("/properties/upload-csv")
+async def upload_property_csv(file: UploadFile = File(...)):
+    contents = await file.read()
+    df = pd.read_csv(io.BytesIO(contents))
+    inserted = []
+    for _, row in df.iterrows():
+        lat, lon = await geocode_address(row["Address"])
+        prop = TrackedProperty(
+            id=str(uuid4()),
+            name=row["Name"],
+            address=row["Address"],
+            latitude=lat,
+            longitude=lon,
+            notes=row.get("Notes", "")
+        )
+        await db.tracked_properties.insert_one(prop.dict())
+        inserted.append(prop)
+    return {"message": f"{len(inserted)} properties imported."}
+
+# Add this to your app.py file
+
+@app.get("/climate-risks/multi-hazard")
+async def get_multi_hazard_risks(lat: float, lon: float):
+    """
+    Fetch comprehensive climate risk data from Open-Meteo and other sources
+    
+    Args:
+        lat: Latitude of the property
+        lon: Longitude of the property
+        
+    Returns:
+        Dict containing risk assessments for multiple climate hazards
+    """
+    try:
+        async with httpx.AsyncClient() as client:
+            # Fetch weather forecast data from Open-Meteo
+            weather_response = await client.get(
+                "https://api.open-meteo.com/v1/forecast",
+                params={
+                    "latitude": lat,
+                    "longitude": lon,
+                    "daily": "temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,windspeed_10m_max,windgusts_10m_max",
+                    "timezone": "auto",
+                    "forecast_days": 14
+                }
+            )
+            
+            if weather_response.status_code != 200:
+                raise HTTPException(status_code=500, detail="Weather API error")
+                
+            weather_data = weather_response.json()
+            
+            # Fetch flood risk data from Open-Meteo Flood API
+            flood_response = await client.get(
+                "https://flood-api.open-meteo.com/v1/flood",
+                params={
+                    "latitude": lat,
+                    "longitude": lon,
+                    "daily": "river_discharge,river_discharge_max"
+                }
+            )
+            
+            if flood_response.status_code != 200:
+                # If flood API fails, we'll still continue with other risk assessments
+                print(f"Flood API error: {flood_response.status_code}")
+                flood_data = {"daily": {"river_discharge": [0.1], "river_discharge_max": [0.2]}}
+            else:
+                flood_data = flood_response.json()
+            
+            # Process the data to calculate risk levels
+            risks = calculate_climate_risks(weather_data, flood_data)
+            
+            return risks
+    except Exception as e:
+        print(f"Error fetching climate risks: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error fetching climate risks: {str(e)}")
+            
+def calculate_climate_risks(weather_data, flood_data):
+    """Calculate climate risks based on weather and flood data"""
+    try:
+        # Extract data for analysis
+        daily = weather_data.get("daily", {})
+        max_temps = daily.get("temperature_2m_max", [20])  # Default if missing
+        min_temps = daily.get("temperature_2m_min", [10])
+        precip_sums = daily.get("precipitation_sum", [0])
+        precip_probs = daily.get("precipitation_probability_max", [0])
+        wind_speeds = daily.get("windspeed_10m_max", [10])
+        wind_gusts = daily.get("windgusts_10m_max", [15])
+        
+        flood_daily = flood_data.get("daily", {})
+        river_discharge = flood_daily.get("river_discharge", [0.1])
+        river_discharge_max = flood_daily.get("river_discharge_max", [0.2])
+        
+        # FLOOD RISK - based on river discharge
+        avg_discharge = sum(river_discharge) / len(river_discharge)
+        max_discharge = max(river_discharge)
+        discharge_ratio = max_discharge / max(avg_discharge, 0.1)  # Avoid division by zero
+        
+        if max_discharge > 500 or discharge_ratio > 2:
+            flood_level = "High"
+            flood_probability = min(90, round(discharge_ratio * 30))
+            flood_detail = f"High flood risk with maximum river discharge of {max_discharge:.1f} m³/s"
+        elif max_discharge > 200 or discharge_ratio > 1.5:
+            flood_level = "Medium"
+            flood_probability = min(70, round(discharge_ratio * 20))
+            flood_detail = "Moderate flood risk with elevated river discharge levels"
+        else:
+            flood_level = "Low"
+            flood_probability = min(30, round(discharge_ratio * 10))
+            flood_detail = "Low flood risk based on current river discharge data"
+        
+        # WILDFIRE RISK - based on temperature and precipitation
+        avg_max_temp = sum(max_temps) / len(max_temps)
+        avg_precip = sum(precip_sums) / len(precip_sums)
+        dry_days = sum(1 for p in precip_sums if p < 1)
+        fire_risk_factor = (avg_max_temp - 15) * (dry_days / len(precip_sums)) * 10
+        
+        if fire_risk_factor > 100:
+            wildfire_level = "High"
+            wildfire_probability = min(90, round(fire_risk_factor / 2))
+            wildfire_detail = "High fire danger due to high temperatures and dry conditions"
+        elif fire_risk_factor > 50:
+            wildfire_level = "Medium"
+            wildfire_probability = min(60, round(fire_risk_factor / 2))
+            wildfire_detail = "Moderate fire risk with periods of elevated temperature"
+        else:
+            wildfire_level = "Low"
+            wildfire_probability = min(30, round(fire_risk_factor / 2))
+            wildfire_detail = "Low fire risk based on current temperature and precipitation patterns"
+        
+        # WIND/HURRICANE RISK - based on wind speeds and gusts
+        max_wind_speed = max(wind_speeds)
+        max_gust = max(wind_gusts)
+        wind_ratio = max_gust / max(max_wind_speed, 1)  # Avoid division by zero
+        
+        if max_gust > 80 or max_wind_speed > 50:
+            wind_level = "High"
+            wind_probability = min(80, round(max_gust))
+            wind_detail = f"High wind risk with maximum gusts of {max_gust:.1f} km/h"
+        elif max_gust > 50 or max_wind_speed > 30:
+            wind_level = "Medium"
+            wind_probability = min(60, round(max_gust / 1.5))
+            wind_detail = f"Moderate wind risk with gusts reaching {max_gust:.1f} km/h"
+        else:
+            wind_level = "Low"
+            wind_probability = min(30, round(max_gust / 2))
+            wind_detail = "Low wind risk with maximum gusts below damaging levels"
+        
+        # DROUGHT RISK - based on precipitation and temperature
+        precip_deficit = 10 - avg_precip  # Assuming 10mm/day is normal
+        temp_excess = avg_max_temp - 20  # Assuming 20°C is a baseline
+        drought_factor = precip_deficit * temp_excess
+        
+        if drought_factor > 50:
+            drought_level = "High"
+            drought_probability = min(90, round(50 + drought_factor))
+            drought_detail = "High drought risk due to rainfall deficit and high temperatures"
+        elif drought_factor > 20:
+            drought_level = "Medium"
+            drought_probability = min(70, round(30 + drought_factor))
+            drought_detail = "Moderate drought potential with below-average precipitation"
+        else:
+            drought_level = "Low"
+            drought_probability = max(10, min(30, round(drought_factor)))
+            drought_detail = "Low drought risk based on precipitation patterns"
+        
+        # STORM RISK - based on precipitation probability and wind
+        max_precip_prob = max(precip_probs) if precip_probs else 0
+        storm_factor = (max_precip_prob / 100) * (max_gust / 50) * 100
+        
+        if storm_factor > 100:
+            storm_level = "High"
+            storm_probability = min(90, round(storm_factor / 2))
+            storm_detail = "High storm/hail risk with strong precipitation probability and wind"
+        elif storm_factor > 50:
+            storm_level = "Medium"
+            storm_probability = min(60, round(storm_factor / 2))
+            storm_detail = "Moderate storm risk with potential for heavy rainfall periods"
+        else:
+            storm_level = "Low"
+            storm_probability = min(30, round(storm_factor / 2))
+            storm_detail = "Low storm/hail risk based on current precipitation and wind patterns"
+        
+        # Calculate premium multiplier based on all risks
+        premium_multiplier = 1.0
+        for level in [flood_level, wildfire_level, wind_level, drought_level, storm_level]:
+            if level == "High":
+                premium_multiplier += 0.5
+            elif level == "Medium":
+                premium_multiplier += 0.2
+        
+        premium_multiplier = round(premium_multiplier * 10) / 10  # Round to 1 decimal place
+        
+        return {
+            "flood": {
+                "level": flood_level,
+                "probability": flood_probability,
+                "detail": flood_detail
+            },
+            "wildfire": {
+                "level": wildfire_level,
+                "probability": wildfire_probability,
+                "detail": wildfire_detail
+            },
+            "wind": {
+                "level": wind_level,
+                "probability": wind_probability,
+                "detail": wind_detail
+            },
+            "drought": {
+                "level": drought_level,
+                "probability": drought_probability,
+                "detail": drought_detail
+            },
+            "storm": {
+                "level": storm_level,
+                "probability": storm_probability,
+                "detail": storm_detail
+            },
+            "premium_multiplier": premium_multiplier,
+            "location": {
+                "latitude": weather_data.get("latitude"),
+                "longitude": weather_data.get("longitude")
+            }
+        }
+    except Exception as e:
+        print(f"Error calculating climate risks: {str(e)}")
+        # Return fallback risk assessment
+        return {
+            "flood": {"level": "Low", "probability": 10, "detail": "Unable to assess flood risk"},
+            "wildfire": {"level": "Low", "probability": 10, "detail": "Unable to assess wildfire risk"},
+            "wind": {"level": "Low", "probability": 10, "detail": "Unable to assess wind risk"},
+            "drought": {"level": "Low", "probability": 10, "detail": "Unable to assess drought risk"},
+            "storm": {"level": "Low", "probability": 10, "detail": "Unable to assess storm risk"},
+            "premium_multiplier": 1.0,
+            "location": {
+                "latitude": weather_data.get("latitude"),
+                "longitude": weather_data.get("longitude")
+            },
+            "error": str(e)
+        }
 
 # Run the application
 if __name__ == "__main__":

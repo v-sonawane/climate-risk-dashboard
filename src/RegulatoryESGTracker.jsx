@@ -3,7 +3,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   LineChart, Line, PieChart, Pie, Cell, Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis
 } from 'recharts';
-import { AlertCircle, TrendingUp, FileText, Globe, Filter, Download, Info } from 'lucide-react';
+import { AlertCircle, TrendingUp, FileText, Globe, Filter, Download, Info, Loader } from 'lucide-react';
 
 // API base URL - change this to match your backend URL
 const API_BASE_URL = 'http://localhost:8000';
@@ -51,42 +51,120 @@ const RegulatoryESGTracker = () => {
     setError(null);
     
     try {
-      // Fetch regulatory trends
-      const trendsResponse = await fetch(`${API_BASE_URL}/regulatory/trends?months=6`);
-      if (!trendsResponse.ok) throw new Error('Failed to fetch regulatory trends');
-      const trendsData = await trendsResponse.json();
-      setRegulatoryTrends(trendsData);
-      
-      // Fetch frameworks with filters
-      let frameworksUrl = `${API_BASE_URL}/regulatory/frameworks?region=${selectedRegion}`;
-      if (minRelevance > 0) {
-        frameworksUrl += `&min_relevance=${minRelevance}`;
+      // Fetch regulatory trends - with improved error handling and logging
+      console.log("Fetching regulatory trends from:", `${API_BASE_URL}/regulatory/trends?months=6`);
+      try {
+        const trendsResponse = await fetch(`${API_BASE_URL}/regulatory/trends?months=6`);
+        
+        // Log response status for debugging
+        console.log("Regulatory trends response status:", trendsResponse.status);
+        
+        if (!trendsResponse.ok) {
+          throw new Error(`HTTP error! Status: ${trendsResponse.status}`);
+        }
+        
+        const trendsData = await trendsResponse.json();
+        console.log("Successfully fetched regulatory trends data:", trendsData);
+        setRegulatoryTrends(trendsData);
+      } catch (err) {
+        console.error("Failed to fetch regulatory trends:", err);
+        // Only use fallback if we couldn't get real data
+        console.log("Using fallback regulatory trends data");
+        const fallbackTrends = generateFallbackRegulatoryTrends(6);
+        setRegulatoryTrends(fallbackTrends);
       }
-      if (frameworkStatus) {
-        frameworksUrl += `&status=${frameworkStatus}`;
+      
+      // Fetch frameworks with filters - with improved error handling
+      let frameworksUrl = `${API_BASE_URL}/regulatory/frameworks`;
+      
+      // Add query params
+      const frameworkParams = new URLSearchParams();
+      if (selectedRegion !== 'global') frameworkParams.append('region', selectedRegion);
+      if (minRelevance > 0) frameworkParams.append('min_relevance', minRelevance);
+      if (frameworkStatus) frameworkParams.append('status', frameworkStatus);
+      
+      // Add params to URL if we have any
+      if (frameworkParams.toString()) {
+        frameworksUrl += `?${frameworkParams.toString()}`;
       }
       
-      const frameworksResponse = await fetch(frameworksUrl);
-      if (!frameworksResponse.ok) throw new Error('Failed to fetch regulatory frameworks');
-      const frameworksData = await frameworksResponse.json();
-      setFrameworks(frameworksData);
+      console.log("Fetching regulatory frameworks from:", frameworksUrl);
+      try {
+        const frameworksResponse = await fetch(frameworksUrl);
+        
+        // Log response status for debugging
+        console.log("Frameworks response status:", frameworksResponse.status);
+        
+        if (!frameworksResponse.ok) {
+          throw new Error(`HTTP error! Status: ${frameworksResponse.status}`);
+        }
+        
+        const frameworksData = await frameworksResponse.json();
+        console.log("Successfully fetched frameworks data:", frameworksData);
+        setFrameworks(frameworksData);
+      } catch (err) {
+        console.error("Failed to fetch regulatory frameworks:", err);
+        // The API should provide fallbacks automatically, but we'll leave
+        // the existing framework data in state if there was an error
+        console.log("Keeping existing frameworks data or relying on API fallbacks");
+      }
       
-      // Fetch ESG impacts with category filter
+      // Fetch ESG impacts with category filter - with improved error handling
       let esgUrl = `${API_BASE_URL}/regulatory/esg-impacts`;
       if (selectedESGCategory) {
         esgUrl += `?category=${selectedESGCategory}`;
       }
       
-      const esgResponse = await fetch(esgUrl);
-      if (!esgResponse.ok) throw new Error('Failed to fetch ESG impacts');
-      const esgData = await esgResponse.json();
-      setEsgImpacts(esgData);
+      console.log("Fetching ESG impacts from:", esgUrl);
+      try {
+        const esgResponse = await fetch(esgUrl);
+        
+        // Log response status for debugging
+        console.log("ESG impacts response status:", esgResponse.status);
+        
+        if (!esgResponse.ok) {
+          throw new Error(`HTTP error! Status: ${esgResponse.status}`);
+        }
+        
+        const esgData = await esgResponse.json();
+        console.log("Successfully fetched ESG impacts data:", esgData);
+        setEsgImpacts(esgData);
+      } catch (err) {
+        console.error("Failed to fetch ESG impacts:", err);
+        // The API should provide fallbacks automatically, but we'll leave
+        // the existing ESG data in state if there was an error
+        console.log("Keeping existing ESG data or relying on API fallbacks");
+      }
     } catch (err) {
-      console.error('Error fetching data:', err);
-      setError(err.message);
+      console.error('Error in overall fetchData function:', err);
+      setError(err.message || "Failed to load data");
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // Generate fallback regulatory trend data when API fails
+  const generateFallbackRegulatoryTrends = (months = 6) => {
+    const currentMonth = new Date();
+    const trends = [];
+    
+    for (let i = 0; i < months; i++) {
+      const monthDate = new Date(currentMonth);
+      monthDate.setMonth(currentMonth.getMonth() - (months - i - 1));
+      const monthStr = `${monthDate.getFullYear()}-${String(monthDate.getMonth() + 1).padStart(2, '0')}`;
+      
+      // Generate realistic trend data with property and casualty having higher regulatory impact
+      trends.push({
+        month: monthStr,
+        property: 25 - i * 2,
+        casualty: 20 - i * 2,
+        life: 10 - i,
+        health: 12 - i,
+        reinsurance: 18 - i * 2
+      });
+    }
+    
+    return trends;
   };
 
   // Helper function to format regulatory trend data for the chart
@@ -182,10 +260,11 @@ const RegulatoryESGTracker = () => {
         <div className="h-72">
           {isLoading ? (
             <div className="flex justify-center items-center h-full">
-              <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500" />
+              <Loader className="h-12 w-12 text-blue-500 animate-spin" />
             </div>
           ) : error ? (
             <div className="text-red-500 flex justify-center items-center h-full">
+              <AlertCircle className="h-6 w-6 mr-2" />
               Error loading trends: {error}
             </div>
           ) : (
@@ -221,15 +300,18 @@ const RegulatoryESGTracker = () => {
           </div>
           {isLoading ? (
             <div className="flex justify-center items-center h-32">
-              <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500" />
+              <Loader className="h-8 w-8 text-blue-500 animate-spin" />
             </div>
           ) : error ? (
-            <div className="text-red-500 p-4">Error loading frameworks: {error}</div>
+            <div className="text-red-500 p-4 flex items-center">
+              <AlertCircle className="h-5 w-5 mr-2" />
+              Error loading frameworks: {error}
+            </div>
           ) : (
             <div className="space-y-3 max-h-80 overflow-y-auto">
               {frameworks.slice(0, 5).map((framework, i) => (
                 <div key={i} className="border p-3 rounded-md">
-                  <div className="flex justify-between">
+                  <div className="flex justify-between items-start">
                     <h4 className="font-medium">{framework.name}</h4>
                     <span 
                       className={`px-2 py-1 text-xs rounded-full font-medium ${
@@ -267,10 +349,13 @@ const RegulatoryESGTracker = () => {
           </div>
           {isLoading ? (
             <div className="flex justify-center items-center h-32">
-              <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500" />
+              <Loader className="h-8 w-8 text-blue-500 animate-spin" />
             </div>
           ) : error ? (
-            <div className="text-red-500 p-4">Error loading ESG data: {error}</div>
+            <div className="text-red-500 p-4 flex items-center">
+              <AlertCircle className="h-5 w-5 mr-2" />
+              Error loading ESG data: {error}
+            </div>
           ) : (
             <div className="space-y-3 max-h-80 overflow-y-auto">
               {esgImpacts.slice(0, 5).map((impact, i) => (
@@ -380,13 +465,13 @@ const RegulatoryESGTracker = () => {
         </div>
       </div>
       
-      {/* Distribution Chart */}
+      {/* Distribution Charts */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="bg-white p-4 rounded-lg shadow">
           <h3 className="text-lg font-medium mb-4">Frameworks by Status</h3>
           {isLoading ? (
             <div className="flex justify-center items-center h-64">
-              <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500" />
+              <Loader className="h-8 w-8 text-blue-500 animate-spin" />
             </div>
           ) : (
             <div className="h-64">
@@ -394,9 +479,9 @@ const RegulatoryESGTracker = () => {
                 <PieChart>
                   <Pie
                     data={[
-                      { name: 'Established', value: frameworks.filter(f => f.status === 'established').length },
-                      { name: 'Emerging', value: frameworks.filter(f => f.status === 'emerging').length },
-                      { name: 'Proposed', value: frameworks.filter(f => f.status === 'proposed').length }
+                      { name: 'Established', value: frameworks.filter(f => f.status === 'established').length || 0 },
+                      { name: 'Emerging', value: frameworks.filter(f => f.status === 'emerging').length || 0 },
+                      { name: 'Proposed', value: frameworks.filter(f => f.status === 'proposed').length || 0 }
                     ]}
                     cx="50%"
                     cy="50%"
@@ -421,18 +506,18 @@ const RegulatoryESGTracker = () => {
           <h3 className="text-lg font-medium mb-4">Insurance Domains Affected</h3>
           {isLoading ? (
             <div className="flex justify-center items-center h-64">
-              <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500" />
+              <Loader className="h-8 w-8 text-blue-500 animate-spin" />
             </div>
           ) : (
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
                   data={[
-                    { name: 'Property', count: frameworks.filter(f => f.domains_affected?.includes('property')).length },
-                    { name: 'Casualty', count: frameworks.filter(f => f.domains_affected?.includes('casualty')).length },
-                    { name: 'Life', count: frameworks.filter(f => f.domains_affected?.includes('life')).length },
-                    { name: 'Health', count: frameworks.filter(f => f.domains_affected?.includes('health')).length },
-                    { name: 'Reinsurance', count: frameworks.filter(f => f.domains_affected?.includes('reinsurance')).length }
+                    { name: 'Property', count: frameworks.filter(f => f.domains_affected?.includes('property')).length || 0 },
+                    { name: 'Casualty', count: frameworks.filter(f => f.domains_affected?.includes('casualty')).length || 0 },
+                    { name: 'Life', count: frameworks.filter(f => f.domains_affected?.includes('life')).length || 0 },
+                    { name: 'Health', count: frameworks.filter(f => f.domains_affected?.includes('health')).length || 0 },
+                    { name: 'Reinsurance', count: frameworks.filter(f => f.domains_affected?.includes('reinsurance')).length || 0 }
                   ]}
                   margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
                 >
@@ -463,84 +548,103 @@ const RegulatoryESGTracker = () => {
         
         {isLoading ? (
           <div className="flex justify-center items-center h-32">
-            <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500" />
+            <Loader className="h-8 w-8 text-blue-500 animate-spin" />
           </div>
         ) : error ? (
-          <div className="text-red-500 p-4">Error loading frameworks: {error}</div>
+          <div className="text-red-500 p-4 flex items-center">
+            <AlertCircle className="h-5 w-5 mr-2" />
+            Error loading frameworks: {error}
+          </div>
         ) : frameworks.length > 0 ? (
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Framework</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Region</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Relevance</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Affected Domains</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {frameworks.map((framework, i) => (
-                  <tr key={i} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="font-medium text-gray-900">{framework.name}</div>
-                      <div className="text-xs text-gray-500 mt-1">{framework.description}</div>
-                      {framework.url && (
-                        <a 
-                          href={framework.url} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="text-xs text-blue-600 hover:text-blue-900 flex items-center mt-1"
-                        >
-                          <Info className="h-3 w-3 mr-1" />
-                          Official Website
-                        </a>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-2 py-1 text-xs rounded-full font-medium ${
-                        framework.status === 'emerging' ? 'bg-yellow-100 text-yellow-800' :
-                        framework.status === 'established' ? 'bg-green-100 text-green-800' :
-                        'bg-purple-100 text-purple-800'
-                      }`}>
-                        {framework.status}
-                      </span>
-                      {framework.implementation_date && (
-                        <div className="text-xs text-gray-500 mt-1">
-                          Since: {framework.implementation_date}
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="capitalize">{framework.region.replace('_', ' ')}</span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center">
-                        <div className="mr-2">{framework.relevance_score.toFixed(1)}</div>
-                        <div className="w-24 bg-gray-200 rounded-full h-2.5">
-                          <div 
-                            className="bg-blue-600 h-2.5 rounded-full" 
-                            style={{ width: `${(framework.relevance_score / 10) * 100}%` }}
-                          ></div>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex flex-wrap gap-1">
-                        {framework.domains_affected?.map((domain, j) => (
-                          <span 
-                            key={j} 
-                            className="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-800"
-                          >
-                            {domain}
-                          </span>
-                        ))}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+           <table className="min-w-full divide-y divide-gray-200">
+  <thead className="bg-gray-50">
+    <tr>
+      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Framework</th>
+      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Region</th>
+      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Relevance</th>
+      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Affected Domains</th>
+    </tr>
+  </thead>
+  <tbody className="bg-white divide-y divide-gray-200">
+    {frameworks.map((framework, i) => (
+      <tr 
+        key={i} 
+        className="hover:bg-gray-50 cursor-pointer"
+        onClick={() => {
+          // If the framework has a URL, open it
+          if (framework.url) {
+            window.open(framework.url, '_blank');
+          } else {
+            // Search for the framework name
+            window.open(`https://www.google.com/search?q=${encodeURIComponent(framework.name + " climate framework")}`, '_blank');
+          }
+        }}
+      >
+        <td className="px-6 py-4 whitespace-nowrap">
+          <div className="font-medium text-blue-600 hover:underline group">
+            {framework.name}
+            <span className="ml-1 text-blue-400 opacity-0 group-hover:opacity-100 transition-opacity">🔗</span>
+          </div>
+          <div className="text-xs text-gray-500 mt-1">{framework.description}</div>
+          {framework.url && (
+            <a 
+              href={framework.url} 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="text-xs text-blue-600 hover:text-blue-900 flex items-center mt-1"
+              onClick={(e) => e.stopPropagation()} // Prevent row click from firing
+            >
+              <Info className="h-3 w-3 mr-1" />
+              Official Website
+            </a>
+          )}
+        </td>
+        <td className="px-6 py-4 whitespace-nowrap">
+          <span className={`px-2 py-1 text-xs rounded-full font-medium ${
+            framework.status === 'emerging' ? 'bg-yellow-100 text-yellow-800' :
+            framework.status === 'established' ? 'bg-green-100 text-green-800' :
+            'bg-purple-100 text-purple-800'
+          }`}>
+            {framework.status}
+          </span>
+          {framework.implementation_date && (
+            <div className="text-xs text-gray-500 mt-1">
+              Since: {framework.implementation_date}
+            </div>
+          )}
+        </td>
+        <td className="px-6 py-4 whitespace-nowrap">
+          <span className="capitalize">{framework.region.replace('_', ' ')}</span>
+        </td>
+        <td className="px-6 py-4 whitespace-nowrap">
+          <div className="flex items-center">
+            <div className="mr-2">{framework.relevance_score?.toFixed(1) || "N/A"}</div>
+            <div className="w-24 bg-gray-200 rounded-full h-2.5">
+              <div 
+                className="bg-blue-600 h-2.5 rounded-full" 
+                style={{ width: `${((framework.relevance_score || 0) / 10) * 100}%` }}
+              ></div>
+            </div>
+          </div>
+        </td>
+        <td className="px-6 py-4">
+          <div className="flex flex-wrap gap-1">
+            {framework.domains_affected?.map((domain, j) => (
+              <span 
+                key={j} 
+                className="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-800"
+              >
+                {domain}
+              </span>
+            ))}
+          </div>
+        </td>
+      </tr>
+    ))}
+  </tbody>
+</table>
           </div>
         ) : (
           <div className="text-center py-6 text-gray-500">
@@ -609,7 +713,7 @@ const RegulatoryESGTracker = () => {
         <h3 className="text-lg font-medium mb-4">ESG Impact Analysis</h3>
         {isLoading ? (
           <div className="flex justify-center items-center h-72">
-            <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500" />
+            <Loader className="h-8 w-8 text-blue-500 animate-spin" />
           </div>
         ) : esgImpacts.length > 0 ? (
           <div className="h-72">
@@ -618,7 +722,7 @@ const RegulatoryESGTracker = () => {
                 subject: `${impact.category}: ${impact.name}`,
                 score: impact.score,
                 fullMark: 10
-              }))}>
+              })).slice(0, 8)}>
                 <PolarGrid />
                 <PolarAngleAxis dataKey="subject" />
                 <PolarRadiusAxis angle={30} domain={[0, 10]} />
@@ -629,7 +733,7 @@ const RegulatoryESGTracker = () => {
           </div>
         ) : (
           <div className="text-center py-6 text-gray-500">
-            No ESG impact data available.
+            No ESG impact data available for the selected category.
           </div>
         )}
       </div>
@@ -649,65 +753,94 @@ const RegulatoryESGTracker = () => {
         
         {isLoading ? (
           <div className="flex justify-center items-center h-32">
-            <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500" />
+            <Loader className="h-8 w-8 text-blue-500 animate-spin" />
           </div>
         ) : error ? (
-          <div className="text-red-500 p-4">Error loading ESG data: {error}</div>
+          <div className="text-red-500 p-4 flex items-center">
+            <AlertCircle className="h-5 w-5 mr-2" />
+            Error loading ESG data: {error}
+          </div>
         ) : esgImpacts.length > 0 ? (
           <div className="space-y-4">
             {esgImpacts.map((impact, i) => (
-              <div key={i} className="border rounded-lg overflow-hidden">
-                <div className={`p-4 ${
-                  impact.category === 'E' ? 'bg-green-50' :
-                  impact.category === 'S' ? 'bg-blue-50' :
-                  'bg-purple-50'
-                }`}>
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <h4 className="font-medium text-lg">
-                        {impact.category === 'E' ? 'Environmental' :
-                         impact.category === 'S' ? 'Social' :
-                         'Governance'}: {impact.name}
-                      </h4>
-                      <div className="flex items-center text-sm mt-1">
-                        <span className={`mr-2 px-2 py-1 rounded-full text-xs font-medium ${
-                          impact.impact === 'High' ? 'bg-red-100 text-red-800' :
-                          impact.impact === 'Medium' ? 'bg-yellow-100 text-yellow-800' :
-                          'bg-green-100 text-green-800'
-                        }`}>
-                          {impact.impact} Impact
-                        </span>
-                        <span className={`flex items-center text-xs ${
-                          impact.trend === 'increasing' ? 'text-red-600' :
-                          impact.trend === 'decreasing' ? 'text-green-600' :
-                          'text-gray-600'
-                        }`}>
-                          {impact.trend === 'increasing' ? '↑' : 
-                          impact.trend === 'decreasing' ? '↓' : '→'} 
-                          {impact.trend}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="bg-white rounded-full h-12 w-12 flex items-center justify-center border">
-                      <span className="font-bold text-lg">{impact.score.toFixed(1)}</span>
-                    </div>
-                  </div>
-                </div>
-                <div className="p-4">
-                  <p className="text-gray-700">{impact.description}</p>
-                  <div className="mt-3">
-                    <h5 className="text-sm font-medium mb-2">Relevant Frameworks:</h5>
-                    <div className="flex flex-wrap gap-2">
-                      {impact.relevant_frameworks?.map((framework, j) => (
-                        <span key={j} className="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-800">
-                          {framework}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ))}
+  <div 
+    key={i} 
+    className="border rounded-lg overflow-hidden cursor-pointer hover:shadow-md transition-shadow"
+    onClick={() => {
+      // If the impact has a source_article_id or link, navigate to it
+      if (impact.source_article_id) {
+        // You may need to update your URL structure based on your routing
+        window.open(`/articles/${impact.source_article_id}`, '_blank');
+      } else if (impact.source_link) {
+        window.open(impact.source_link, '_blank');
+      } else {
+        // Optionally trigger a search for this impact
+        const searchQuery = `${impact.category === 'E' ? 'Environmental' : 
+                          impact.category === 'S' ? 'Social' : 
+                          'Governance'} ${impact.name}`;
+        
+        // Update with your search URL
+        window.open(`/search?query=${encodeURIComponent(searchQuery)}`, '_blank');
+      }
+    }}
+  >
+    <div className={`p-4 ${
+      impact.category === 'E' ? 'bg-green-50' :
+      impact.category === 'S' ? 'bg-blue-50' :
+      'bg-purple-50'
+    }`}>
+      <div className="flex justify-between items-start">
+        <div>
+          <h4 className="font-medium text-lg group">
+            {impact.category === 'E' ? 'Environmental' :
+             impact.category === 'S' ? 'Social' :
+             'Governance'}: {impact.name}
+            <span className="ml-1 text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity">🔗</span>
+          </h4>
+          <div className="flex items-center text-sm mt-1">
+            <span className={`mr-2 px-2 py-1 rounded-full text-xs font-medium ${
+              impact.impact === 'High' ? 'bg-red-100 text-red-800' :
+              impact.impact === 'Medium' ? 'bg-yellow-100 text-yellow-800' :
+              'bg-green-100 text-green-800'
+            }`}>
+              {impact.impact} Impact
+            </span>
+            <span className={`flex items-center text-xs ${
+              impact.trend === 'increasing' ? 'text-red-600' :
+              impact.trend === 'decreasing' ? 'text-green-600' :
+              'text-gray-600'
+            }`}>
+              {impact.trend === 'increasing' ? '↑' : 
+              impact.trend === 'decreasing' ? '↓' : '→'} 
+              {impact.trend}
+            </span>
+          </div>
+        </div>
+        <div className="bg-white rounded-full h-12 w-12 flex items-center justify-center border">
+          <span className="font-bold text-lg">{impact.score.toFixed(1)}</span>
+        </div>
+      </div>
+    </div>
+    <div className="p-4">
+      <p className="text-gray-700">{impact.description}</p>
+      <div className="mt-3">
+        <h5 className="text-sm font-medium mb-2">Relevant Frameworks:</h5>
+        <div className="flex flex-wrap gap-2">
+          {impact.relevant_frameworks?.map((framework, j) => (
+            <span key={j} className="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-800">
+              {framework}
+            </span>
+          ))}
+        </div>
+      </div>
+      <div className="mt-2 text-right">
+        <span className="text-xs text-blue-600 hover:underline">
+          {impact.source ? `Source: ${impact.source}` : 'View details'}
+        </span>
+      </div>
+    </div>
+  </div>
+))}
           </div>
         ) : (
           <div className="text-center py-6 text-gray-500">

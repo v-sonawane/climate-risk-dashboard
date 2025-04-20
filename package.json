@@ -134,6 +134,7 @@
     "type-check": "^0.4.0",
     "update-browserslist-db": "^1.1.3",
     "uri-js": "^4.4.1",
+    "uuid": "^11.1.0",
     "victory-vendor": "^36.9.2",
     "vite": "^6.3.2",
     "which": "^2.0.2",
