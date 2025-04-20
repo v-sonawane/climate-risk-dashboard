@@ -1,98 +1,107 @@
-🧠 Project: Climate Risk Intelligence – AI-Powered Climate Risk Intelligence for Insurance
 
-🌪️ Real-Time Climate-Aware Underwriting. For All Lines of Insurance.
+---
 
-🎯 Problem
+## 🧠 **Project: ClimateIQ – AI-Powered Climate Risk Intelligence for Insurance**
+
+### 🌪️ Real-Time Climate-Aware Underwriting. For All Lines of Insurance.
+
+---
+
+## 🎯 Problem
+
 Climate volatility, evolving ESG mandates, and shifting regulatory landscapes are rapidly reshaping insurance underwriting. Traditional tools are:
 
-Reactive, not proactive
+- **Reactive**, not proactive  
+- **Siloed** by region or product line  
+- **Manual**, lacking AI-driven insights
 
-Siloed by region or product line
+Insurers need a unified way to assess risk **across all lines** of business—with climate and ESG built in.
 
-Manual, lacking AI-driven insights
+---
 
-Insurers need a unified way to assess risk across all lines of business—with climate and ESG built in.
+## 💡 Solution: ClimateIQ
 
-💡 Solution: ClimateIQ
-A next-generation climate-aware underwriting dashboard, designed to support all 5 core insurance verticals:
+A next-generation **climate-aware underwriting dashboard**, designed to support all 5 core insurance verticals:
 
-🔹 1. Property
+### 🔹 1. Property  
 Track fire, flood, and storm hazards that drive catastrophic loss modeling.
 
-🔹 2. Casualty
+### 🔹 2. Casualty  
 Understand liability shifts linked to ESG regulations and supply chain events.
 
-🔹 3. Life
+### 🔹 3. Life  
 Monitor temperature, drought, and long-term climate trends impacting actuarial models.
 
-🔹 4. Health
+### 🔹 4. Health  
 Track urban heat islands, air quality, and hazard hotspots affecting population risk.
 
-🔹 5. Reinsurance
+### 🔹 5. Reinsurance  
 Provide reinsurers with AI-generated, evidence-backed summaries of aggregate risk and ESG exposure by region and domain.
 
-⚙️ Platform Highlights
-🧠 AI-Generated Underwriting Challenges
-Extracted from global ESG disclosures, climate reports, and news
+---
 
-Sorted by hazard type, region, and impact level
+## ⚙️ Platform Highlights
 
-Ready-to-consume insights for UWs, actuaries, and portfolio analysts
+### 🧠 AI-Generated Underwriting Challenges  
+- Extracted from global ESG disclosures, climate reports, and news  
+- Sorted by hazard type, region, and impact level  
+- Ready-to-consume insights for UWs, actuaries, and portfolio analysts  
 
-📊 Real-Time Coverage Gap & Risk Visualization
-Dynamic bar and line charts per domain (property, health, etc.)
+### 📊 Real-Time Coverage Gap & Risk Visualization  
+- Dynamic bar and line charts per domain (property, health, etc.)  
+- Drill into top drivers by hazard type and geography  
+- Identify underserved markets and model blind spots  
 
-Drill into top drivers by hazard type and geography
+### 🌍 ESG Framework Intelligence  
+- 50+ global frameworks tracked (TNFD, SFDR, SEC climate rule)  
+- Filter by status (emerging/established/proposed), region, and impact  
+- Export-ready for compliance, risk, and sustainability teams  
 
-Identify underserved markets and model blind spots
+### 📄 Instant Reports & Regulatory Briefs  
+- Generate PDF summaries with branded headers  
+- Schedule weekly/monthly rollups for executive teams  
+- All charts and insights backed by live data
 
-🌍 ESG Framework Intelligence
-50+ global frameworks tracked (TNFD, SFDR, SEC climate rule)
+---
 
-Filter by status (emerging/established/proposed), region, and impact
+## 🔧 Tech Stack
 
-Export-ready for compliance, risk, and sustainability teams
+| Layer | Tech |
+|-------|------|
+| **Frontend** | React, Recharts, Tailwind, jsPDF |
+| **Backend** | FastAPI, MongoDB, APScheduler |
+| **LLM Pipeline** | LangChain + Claude (Anthropic), OpenAI fallback |
+| **Deployment** | Dockerized, cloud-ready |
 
-📄 Instant Reports & Regulatory Briefs
-Generate PDF summaries with branded headers
+---
 
-Schedule weekly/monthly rollups for executive teams
+## 📈 Hackathon Deliverables
 
-All charts and insights backed by live data
+✅ AI summarization engine for underwriting risk  
+✅ Insurance-domain-specific dashboard with real-time filters  
+✅ Hazard + ESG + premium trend ingestion  
+✅ PDF report generator with export options  
+✅ Multi-tab UX with domain breakdowns  
 
-🔧 Tech Stack
+---
 
-Layer	Tech
-Frontend	React, Recharts, Tailwind, jsPDF
-Backend	FastAPI, MongoDB, APScheduler
-LLM Pipeline	LangChain + Claude (Anthropic), OpenAI fallback
-Deployment	Dockerized, cloud-ready
-📈 Hackathon Deliverables
-✅ AI summarization engine for underwriting risk
-✅ Insurance-domain-specific dashboard with real-time filters
-✅ Hazard + ESG + premium trend ingestion
-✅ PDF report generator with export options
-✅ Multi-tab UX with domain breakdowns
+## 👥 Ideal Users
 
-👥 Ideal Users
-Chief Underwriting Officers
+- Chief Underwriting Officers  
+- Risk and Actuarial Analysts  
+- ESG & Compliance Teams  
+- Reinsurance Portfolio Managers  
+- Product & Pricing Actuaries
 
-Risk and Actuarial Analysts
+---
 
-ESG & Compliance Teams
+## ✅ What’s Next
 
-Reinsurance Portfolio Managers
+- Add authenticated user roles (e.g. Broker vs Reinsurer)  
+- Real-time catastrophe feed (NOAA, NASA, Copernicus)  
+- API integrations with Guidewire, Duck Creek  
+- Premium leakage analytics  
+- Generative ESG disclosure authoring for compliance teams  
 
-Product & Pricing Actuaries
-
-✅ What’s Next
-Add authenticated user roles (e.g. Broker vs Reinsurer)
-
-Real-time catastrophe feed (NOAA, NASA, Copernicus)
-
-API integrations with Guidewire, Duck Creek
-
-Premium leakage analytics
-
-Generative ESG disclosure authoring for compliance teams
+---
 
