@@ -3,6 +3,8 @@ import ReactDOM from 'react-dom/client'
 import App from './App.jsx'
 import './styles.css'
 import RiskMap from './RiskMap.jsx';
+import RegulatoryESGTracker from './RegulatoryESGTracker.jsx';
+import UnderwritingCoverageAnalysis from './Underwriting.jsx';
 
 
 ReactDOM.createRoot(document.getElementById('root')).render(

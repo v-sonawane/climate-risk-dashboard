@@ -1,5 +1,5 @@
 # app.py - FIXED VERSION
-from fastapi import FastAPI, HTTPException, Depends, BackgroundTasks, Query, status, Path
+from fastapi import FastAPI, HTTPException, Depends, BackgroundTasks, Query, status, Path, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Dict, Any, Optional, Union
 from pydantic import BaseModel, Field, field_serializer
@@ -22,6 +22,7 @@ from dotenv import load_dotenv
 import ast
 from langchain_core.messages import SystemMessage, HumanMessage
 from fastapi.middleware.cors import CORSMiddleware
+import httpx
 
 # … after: app = FastAPI(...)
 origins = [
@@ -34,6 +35,413 @@ origins = [
 load_dotenv()
 
 llm= ChatAnthropic(model='claude-3-7-sonnet-20250219')
+
+
+class RegulatoryFramework(BaseModel):
+    name: str
+    description: str
+    status: str  # 'emerging', 'established', 'proposed'
+    region: str
+    relevance_score: float
+    implementation_date: Optional[str] = None
+    url: Optional[str] = None
+    domains_affected: List[str]
+
+class RegulatoryTrend(BaseModel):
+    month: str
+    property: int
+    casualty: int
+    life: int
+    health: int
+    reinsurance: int
+
+class ESGImpact(BaseModel):
+    category: str
+    name: str
+    score: float
+    impact: str  # 'High', 'Medium', 'Low'
+    description: str
+    relevant_frameworks: List[str]
+    trend: str  # 'increasing', 'stable', 'decreasing'
+
+# ---- Create a router for regulatory endpoints ----
+regulatory_router = APIRouter(prefix="/regulatory", tags=["regulatory"])
+
+@regulatory_router.get("/frameworks", response_model=List[RegulatoryFramework])
+async def get_regulatory_frameworks(
+    region: Optional[str] = None,
+    status: Optional[str] = None,
+    min_relevance: Optional[float] = None
+):
+    """
+    Get regulatory frameworks relevant to climate risk in insurance.
+    Filter by region, status, and minimum relevance score.
+    """
+    try:
+        # Query the database for regulatory frameworks
+        query = {}
+        if region:
+            query["region"] = region
+        if status:
+            query["status"] = status
+        if min_relevance:
+            query["relevance_score"] = {"$gte": min_relevance}
+        
+        frameworks = []
+        async for framework in db.regulatory_frameworks.find(query).sort("relevance_score", -1):
+            frameworks.append(document_helper(framework))
+            
+        if not frameworks:
+            # If no data in database yet, extract from existing structured summaries
+            frameworks = await extract_regulatory_frameworks_from_summaries(region, status, min_relevance)
+            
+        return frameworks
+    except Exception as e:
+        logger.error(f"Error fetching regulatory frameworks: {str(e)}")
+        # Return at least basic frameworks based on literature
+        return [
+            {
+                "name": "TCFD",
+                "description": "Task Force on Climate-related Financial Disclosures - Framework for climate-related financial risk disclosures",
+                "status": "established",
+                "region": "global",
+                "relevance_score": 9.5,
+                "implementation_date": "2017-06-29",
+                "url": "https://www.fsb-tcfd.org/",
+                "domains_affected": ["property", "casualty", "life", "health", "reinsurance"]
+            },
+            {
+                "name": "TNFD",
+                "description": "Taskforce on Nature-related Financial Disclosures - Framework for nature-related risk management",
+                "status": "emerging",
+                "region": "global",
+                "relevance_score": 8.7,
+                "implementation_date": "2023-09-18",
+                "url": "https://tnfd.global/",
+                "domains_affected": ["property", "casualty", "reinsurance"]
+            }
+        ]
+
+@regulatory_router.get("/trends", response_model=List[RegulatoryTrend])
+async def get_regulatory_trends(months: int = 6):
+    """
+    Get trends of regulatory mentions in articles by insurance domain over time.
+    """
+    try:
+        # Calculate the date range
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=30 * months)
+        
+        # Aggregate mentions by month and domain from structured summaries
+        pipeline = [
+            {"$match": {"created_at": {"$gte": start_date, "$lte": end_date}}},
+            {"$project": {
+                "month": {"$dateToString": {"format": "%Y-%m", "date": "$created_at"}},
+                "insurance_domains": 1,
+                "regulatory_impact": 1
+            }},
+            {"$unwind": "$insurance_domains"},
+            {"$group": {
+                "_id": {
+                    "month": "$month",
+                    "domain": "$insurance_domains"
+                },
+                "count": {"$sum": 1}
+            }},
+            {"$sort": {"_id.month": 1}}
+        ]
+        
+        aggregation_results = await db.structured_summaries.aggregate(pipeline).to_list(length=1000)
+        
+        # Transform the results into the format we need
+        month_data = {}
+        for result in aggregation_results:
+            month = result["_id"]["month"]
+            domain = result["_id"]["domain"].lower()
+            count = result["count"]
+            
+            if month not in month_data:
+                month_data[month] = {
+                    "month": month,
+                    "property": 0,
+                    "casualty": 0,
+                    "life": 0,
+                    "health": 0,
+                    "reinsurance": 0
+                }
+            
+            if domain in month_data[month]:
+                month_data[month][domain] = count
+        
+        # Convert dictionary to list, sorted by month
+        trends = sorted(month_data.values(), key=lambda x: x["month"])
+        
+        # If no data, provide a basic fallback
+        if not trends:
+            trends = generate_fallback_regulatory_trends(months)
+            
+        return trends
+    except Exception as e:
+        logger.error(f"Error fetching regulatory trends: {str(e)}")
+        return generate_fallback_regulatory_trends(months)
+
+@regulatory_router.get("/esg-impacts", response_model=List[ESGImpact])
+async def get_esg_impacts(
+    category: Optional[str] = None  # 'E', 'S', or 'G'
+):
+    """
+    Get ESG impacts related to climate risk for insurance companies.
+    """
+    try:
+        # Query the database for ESG impacts
+        query = {}
+        if category:
+            query["category"] = category
+        
+        impacts = []
+        async for impact in db.esg_impacts.find(query).sort("score", -1):
+            impacts.append(document_helper(impact))
+            
+        if not impacts:
+            # If no data in database yet, extract from structured summaries
+            impacts = await extract_esg_impacts_from_summaries(category)
+            
+        return impacts
+    except Exception as e:
+        logger.error(f"Error fetching ESG impacts: {str(e)}")
+        # Return basic ESG impacts based on literature
+        return [
+            {
+                "category": "E",
+                "name": "Physical Risk",
+                "score": 8.5,
+                "impact": "High",
+                "description": "Increased frequency and severity of weather events affecting property insurance claims",
+                "relevant_frameworks": ["TCFD", "TNFD", "EU Taxonomy"],
+                "trend": "increasing"
+            },
+            {
+                "category": "E",
+                "name": "Transition Risk",
+                "score": 7.2,
+                "impact": "Medium",
+                "description": "Financial impact of shift to low-carbon economy on insured businesses and investment portfolios",
+                "relevant_frameworks": ["TCFD", "EU Taxonomy", "SEC Climate Rule"],
+                "trend": "increasing"
+            },
+            {
+                "category": "S",
+                "name": "Climate Justice",
+                "score": 6.5,
+                "impact": "Medium", 
+                "description": "Addressing inequities in climate risk exposure and insurance availability in vulnerable communities",
+                "relevant_frameworks": ["UN SDGs", "NAIC Climate Risk Disclosure"],
+                "trend": "increasing"
+            },
+            {
+                "category": "G",
+                "name": "Climate Risk Governance",
+                "score": 8.0,
+                "impact": "High",
+                "description": "Board oversight and management accountability for climate risk strategy and disclosure",
+                "relevant_frameworks": ["TCFD", "ISSB", "SEC Climate Rule"],
+                "trend": "increasing"
+            }
+        ]
+
+# ---- Helper functions ----
+
+async def extract_regulatory_frameworks_from_summaries(region=None, status=None, min_relevance=None):
+    """
+    Extract regulatory frameworks from structured summaries and articles.
+    Used when dedicated regulatory_frameworks collection is empty.
+    """
+    # Query structured summaries for regulatory mentions
+    query = {"regulatory_impact": {"$exists": True, "$ne": None}}
+    
+    frameworks = {}
+    async for summary in db.structured_summaries.find(query):
+        # Extract framework names from regulatory_impact field
+        regulatory_text = summary.get("regulatory_impact", "")
+        
+        # Look for common framework names
+        common_frameworks = [
+            "TCFD", "TNFD", "ISSB", "EU Taxonomy", "SFDR", "CSRD", 
+            "SEC Climate Rule", "NAIC", "APRA CPG 229"
+        ]
+        
+        for framework in common_frameworks:
+            if framework in regulatory_text:
+                if framework not in frameworks:
+                    # Initialize new framework
+                    region_guess = "global"
+                    if "EU" in framework or "SFDR" in framework or "CSRD" in framework:
+                        region_guess = "europe"
+                    elif "SEC" in framework or "NAIC" in framework:
+                        region_guess = "north_america"
+                    elif "APRA" in framework:
+                        region_guess = "asia_pacific"
+                    
+                    status_guess = "established"
+                    if "TNFD" in framework or "ISSB" in framework:
+                        status_guess = "emerging"
+                    
+                    frameworks[framework] = {
+                        "name": framework,
+                        "description": f"Regulatory framework related to climate risk disclosure and management",
+                        "status": status_guess,
+                        "region": region_guess,
+                        "relevance_score": 7.0,  # Default score
+                        "domains_affected": []
+                    }
+                
+                # Add domains affected
+                domains = summary.get("insurance_domains", [])
+                for domain in domains:
+                    if domain not in frameworks[framework]["domains_affected"]:
+                        frameworks[framework]["domains_affected"].append(domain)
+                        
+                # Increase relevance score with each mention
+                frameworks[framework]["relevance_score"] = min(10.0, frameworks[framework]["relevance_score"] + 0.2)
+    
+    # Filter results based on parameters
+    result = list(frameworks.values())
+    if region:
+        result = [f for f in result if f["region"] == region]
+    if status:
+        result = [f for f in result if f["status"] == status]
+    if min_relevance:
+        result = [f for f in result if f["relevance_score"] >= min_relevance]
+    
+    # Sort by relevance
+    result.sort(key=lambda x: x["relevance_score"], reverse=True)
+    
+    return result
+
+async def extract_esg_impacts_from_summaries(category=None):
+    """
+    Extract ESG impacts from structured summaries when esg_impacts collection is empty.
+    """
+    # Initialize counters for different ESG categories and topics
+    esg_categories = {
+        "E": ["Physical Risk", "Transition Risk", "Biodiversity Loss", "Resource Scarcity"],
+        "S": ["Community Impact", "Health Effects", "Employment Shifts", "Climate Justice"],
+        "G": ["Risk Governance", "Disclosure Requirements", "Board Oversight", "Strategy Integration"]
+    }
+    
+    impact_counts = {}
+    for cat, topics in esg_categories.items():
+        for topic in topics:
+            impact_counts[f"{cat}-{topic}"] = {
+                "category": cat,
+                "name": topic,
+                "count": 0,
+                "score": 5.0,  # Default score
+                "relevant_frameworks": [],
+                "domains": [],
+                "trend": "stable"
+            }
+    
+    # Query all structured summaries
+    async for summary in db.structured_summaries.find():
+        # Check risk factors for ESG relevance
+        risk_factors = summary.get("risk_factors", [])
+        business_imp = summary.get("business_implications", "")
+        reg_impact = summary.get("regulatory_impact", "")
+        content = " ".join([str(factor) for factor in risk_factors]) + " " + business_imp + " " + reg_impact
+        content = content.lower()
+        
+        # Map keywords to ESG categories
+        keyword_mapping = {
+            "E-Physical Risk": ["flood", "hurricane", "wildfire", "drought", "extreme weather", "sea level"],
+            "E-Transition Risk": ["carbon", "emission", "renewable", "transition", "stranded assets"],
+            "E-Biodiversity Loss": ["biodiversity", "ecosystem", "nature", "species", "habitat"],
+            "E-Resource Scarcity": ["water", "resource", "scarcity", "depletion"],
+            "S-Community Impact": ["community", "displacement", "migration", "vulnerability"],
+            "S-Health Effects": ["health", "disease", "mortality", "morbidity", "heat stress"],
+            "S-Employment Shifts": ["job", "employment", "workforce", "labor", "skills"],
+            "S-Climate Justice": ["justice", "equity", "vulnerable", "underserved", "minority"],
+            "G-Risk Governance": ["governance", "management", "oversight", "committee"],
+            "G-Disclosure Requirements": ["disclosure", "reporting", "transparency", "materiality"],
+            "G-Board Oversight": ["board", "director", "oversight", "responsibility"],
+            "G-Strategy Integration": ["strategy", "integration", "long-term", "planning"]
+        }
+        
+        # Check for keyword matches
+        for impact_key, keywords in keyword_mapping.items():
+            for keyword in keywords:
+                if keyword in content:
+                    impact_counts[impact_key]["count"] += 1
+                    # Increase score with each mention
+                    impact_counts[impact_key]["score"] = min(10.0, impact_counts[impact_key]["score"] + 0.1)
+                    
+                    # Check if there are domains affected
+                    domains = summary.get("insurance_domains", [])
+                    for domain in domains:
+                        if domain not in impact_counts[impact_key]["domains"]:
+                            impact_counts[impact_key]["domains"].append(domain)
+                    
+                    # Check for framework mentions
+                    frameworks = ["TCFD", "TNFD", "EU Taxonomy", "SFDR", "ISSB", "SEC Climate Rule"]
+                    for framework in frameworks:
+                        if framework in reg_impact and framework not in impact_counts[impact_key]["relevant_frameworks"]:
+                            impact_counts[impact_key]["relevant_frameworks"].append(framework)
+                    
+                    break  # Only count each keyword once per summary
+    
+    # Transform to final format
+    results = []
+    for key, data in impact_counts.items():
+        if data["count"] > 0:  # Only include impacts with at least one mention
+            impact_level = "Low"
+            if data["score"] >= 7.5:
+                impact_level = "High"
+            elif data["score"] >= 5.0:
+                impact_level = "Medium"
+                
+            results.append({
+                "category": data["category"],
+                "name": data["name"],
+                "score": round(data["score"], 1),
+                "impact": impact_level,
+                "description": f"Impact on insurance related to {data['name'].lower()} with {len(data['domains'])} affected domains",
+                "relevant_frameworks": data["relevant_frameworks"],
+                "trend": "increasing" if data["score"] > 7.0 else "stable"
+            })
+    
+    # Filter by category if requested
+    if category:
+        results = [r for r in results if r["category"] == category]
+    
+    # Sort by score
+    results.sort(key=lambda x: x["score"], reverse=True)
+    
+    return results
+
+def generate_fallback_regulatory_trends(months=6):
+    """Generate fallback regulatory trend data when database queries return no results"""
+    trends = []
+    current_month = datetime.now()
+    
+    for i in range(months):
+        month_date = current_month - timedelta(days=30 * i)
+        month_str = month_date.strftime("%Y-%m")
+        
+        # Generate realistic trend data with property and casualty having higher regulatory impact
+        trends.append({
+            "month": month_str,
+            "property": 25 - i * 2,
+            "casualty": 20 - i * 2,
+            "life": 10 - i,
+            "health": 12 - i,
+            "reinsurance": 18 - i * 2
+        })
+    
+    # Sort by month (ascending)
+    trends.sort(key=lambda x: x["month"])
+    
+    return trends
+
 
 
 # Create and persist FAISS index from articles
@@ -110,6 +518,9 @@ app.add_middleware(
     allow_methods=["*"],              # GET, POST, OPTIONS, etc.
     allow_headers=["*"],              # Allow all headers
 )
+
+app.include_router(regulatory_router)
+
 
 # MongoDB configuration
 MONGODB_URL = os.getenv("MONGODB_URL", "mongodb://localhost:27017")
@@ -412,6 +823,11 @@ async def startup_event():
     await db.structured_summaries.create_index("insurance_domains")
     await db.structured_summaries.create_index("created_at")
     await db.reports.create_index("created_at")
+    await db.regulatory_frameworks.create_index("name", unique=True)
+    await db.regulatory_frameworks.create_index("region")
+    await db.regulatory_frameworks.create_index("relevance_score")
+    await db.esg_impacts.create_index([("category", 1), ("name", 1)], unique=True)
+    await db.esg_impacts.create_index("score")
     
     # Schedule vector index maintenance
     async def update_vector_indexes():
@@ -2604,41 +3020,44 @@ async def generate_location(article_id: str):
     
     raise HTTPException(status_code=400, detail="Failed to geocode location")
 
+from pymongo import DESCENDING
+
 @app.get("/trends/emerging")
 async def get_emerging_trends():
-    # You might have article_risk_factors like:
-    # {"flood": 4, "wildfire": 9, "disclosure": 2, ...}
-    
     recent_window = datetime.utcnow() - timedelta(days=30)
     older_window = datetime.utcnow() - timedelta(days=90)
 
-    recent_counts = await db.articles.aggregate([
+    # Get recent factor counts (last 30 days)
+    recent = await db.articles.aggregate([
         {"$match": {"date": {"$gte": recent_window}}},
         {"$unwind": "$risk_factors"},
         {"$group": {"_id": "$risk_factors", "count": {"$sum": 1}}}
     ]).to_list(length=100)
 
-    older_counts = await db.articles.aggregate([
+    # Get older factor counts (30–90 days ago)
+    older = await db.articles.aggregate([
         {"$match": {"date": {"$gte": older_window, "$lt": recent_window}}},
         {"$unwind": "$risk_factors"},
         {"$group": {"_id": "$risk_factors", "count": {"$sum": 1}}}
     ]).to_list(length=100)
 
-    # Compute momentum = % increase
     trend_map = {}
-    for t in recent_counts:
-        trend_map[t["_id"]] = {"recent": t["count"], "change": 0}
+    for r in recent:
+        trend_map[r["_id"]] = {"recent": r["count"], "change": 0}
 
-    for t in older_counts:
-        if t["_id"] in trend_map:
-            prev = t["count"]
-            curr = trend_map[t["_id"]]["recent"]
-            change = ((curr - prev) / prev * 100) if prev else 0
-            trend_map[t["_id"]]["change"] = round(change, 1)
+    for o in older:
+        if o["_id"] in trend_map:
+            prev = o["count"]
+            curr = trend_map[o["_id"]]["recent"]
+            trend_map[o["_id"]]["change"] = round(((curr - prev) / prev * 100), 1) if prev else 0
 
-    top = sorted(trend_map.items(), key=lambda kv: -kv[1]["change"])[:10]
+    sorted_trends = sorted(
+        [{"factor": k, **v} for k, v in trend_map.items()],
+        key=lambda x: -x["change"]
+    )
 
-    return [{"factor": k, **v} for k, v in top]
+    return sorted_trends[:10]
+
 
 
 # Run the application

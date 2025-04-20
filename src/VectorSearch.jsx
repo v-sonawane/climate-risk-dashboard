@@ -346,31 +346,55 @@ const VectorSearch = () => {
           </div>
         )}
 
-        {activeTab === 'trends' && (
-          <div className="py-8 text-center">
-            <div className="inline-flex items-center justify-center p-4 bg-blue-50 rounded-full mb-4">
-              <Activity className="w-8 h-8 text-blue-600" />
-            </div>
-            <h3 className="text-lg font-medium">Emerging Trends Analysis</h3>
-            <div className="bg-white rounded-lg shadow p-4">
-  <h2 className="text-xl font-semibold mb-4">Emerging Climate Risk Trends</h2>
-  <div className="divide-y">
-    {trends.map((t, i) => (
-      <div key={i} className="py-2 flex justify-between items-center">
-        <span className="capitalize font-medium">{t.factor}</span>
-        <span
-          className={`text-sm font-semibold ${
-            t.change > 0 ? 'text-red-600' : t.change < 0 ? 'text-green-600' : 'text-gray-500'
-          }`}
-        >
-          {t.change > 0 ? '+' : ''}{t.change}%
-        </span>
+{activeTab === 'trends' && (
+  <div className="py-8">
+    <div className="mb-6 text-center">
+      <div className="inline-flex items-center justify-center p-4 bg-blue-50 rounded-full mb-2">
+        <Activity className="w-8 h-8 text-blue-600" />
       </div>
-    ))}
+      <h3 className="text-2xl font-semibold">Emerging Climate Risk Trends</h3>
+      <p className="text-sm text-gray-500 mt-1">Based on changes in article frequency over time</p>
+    </div>
+
+    {trends.length === 0 ? (
+      <p className="text-center text-gray-500">No trend data available.</p>
+    ) : (
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {trends.map((trend, i) => {
+          const { factor, recent, change } = trend;
+          const isIncreasing = change > 0;
+
+          return (
+            <div key={i} className="border border-gray-200 rounded-lg p-4 shadow-sm bg-white">
+              <div className="flex justify-between items-start">
+                <h4 className="text-lg font-semibold capitalize text-gray-800">{factor}</h4>
+                <span className={`text-sm font-semibold ${isIncreasing ? 'text-red-600' : 'text-green-600'}`}>
+                  {isIncreasing ? '+' : ''}{change}% 
+                </span>
+              </div>
+              <p className="text-sm text-gray-500 mt-1">
+                {isIncreasing
+                  ? `Mentions increased to ${recent} in past month`
+                  : `Mentions decreased to ${recent}`}
+              </p>
+
+              {/* Visual bar */}
+              <div className="mt-3">
+                <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full ${isIncreasing ? 'bg-red-500' : 'bg-green-500'}`}
+                    style={{ width: `${Math.min(Math.abs(change), 100)}%` }}
+                  ></div>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    )}
   </div>
-</div>
-          </div>
-        )}
+)}
+
       </div>
     </div>
   );

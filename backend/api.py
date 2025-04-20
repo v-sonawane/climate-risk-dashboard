@@ -1436,7 +1436,7 @@ def create_fallback_report(error_message="Error in report generation"):
     }
 
 @tool
-def generate_summary_reports(structured_info, llm):
+def generate_summary_reports(structured_info, llm=None):
     """Generate summary reports from structured information"""
     # Basic validation
     if not structured_info:

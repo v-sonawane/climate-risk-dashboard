@@ -12,6 +12,9 @@ import html2canvas from 'html2canvas';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm     from 'remark-gfm';
 import RiskMap from './RiskMap.jsx';
+import UnderwritingCoverageAnalysis from './Underwriting.jsx';
+import RegulatoryESGTracker from './RegulatoryESGTracker.jsx';
+
 // API base URL - change this to match your backend URL
 const API_BASE_URL = 'http://localhost:8000';
 
@@ -21,6 +24,52 @@ const TREND_COLORS = {
   increasing: '#FF4560',
   stable: '#00E396',
   decreasing: '#008FFB'
+};
+// Updated fetchFrameworksData function with proper error handling
+const fetchFrameworksData = async () => {
+  try {
+    const res = await fetch(`${API_BASE_URL}/regulatory/frameworks`);
+    if (!res.ok) throw new Error("Failed to fetch frameworks data");
+    const data = await res.json();
+    setFrameworks(data);
+  } catch (error) {
+    console.error("Error fetching frameworks data:", error);
+    // Set fallback data
+    setFrameworks([
+      { id: 1, name: "TCFD", status: "established" },
+      { id: 2, name: "TNFD", status: "emerging" },
+      { id: 3, name: "EU Taxonomy", status: "established" },
+      { id: 4, name: "NAIC Climate Risk Disclosure", status: "emerging" },
+      { id: 5, name: "ISSB Standards", status: "proposed" },
+      { id: 6, name: "CDSB Framework", status: "established" },
+      { id: 7, name: "NGFS Scenarios", status: "emerging" }
+    ]);
+    // Re-throw the error so the main function knows there was an issue
+    throw error;
+  }
+};
+
+// Updated fetchPremiumData function with proper error handling
+const fetchPremiumData = async () => {
+  try {
+    const res = await fetch(`${API_BASE_URL}/underwriting/premium-trends`);
+    if (!res.ok) throw new Error("Failed to fetch premium data");
+    
+    const data = await res.json();
+    if (data.length > 1) {
+      // Calculate the percentage increase between first and last data points
+      const firstPoint = data[0].property;
+      const lastPoint = data[data.length - 1].property;
+      const increase = ((lastPoint / firstPoint) - 1) * 100;
+      setPremiumIncrease(Math.round(increase));
+    }
+  } catch (error) {
+    console.error("Error fetching premium data:", error);
+    // Keep the default fallback value of 48%
+    setPremiumIncrease(48);
+    // Re-throw the error so the main function knows there was an issue
+    throw error;
+  }
 };
 
 const InsuranceClimateDashboard = () => {
@@ -41,6 +90,8 @@ const InsuranceClimateDashboard = () => {
   // Article-detail state
   const [selectedArticle, setSelectedArticle] = useState(null);
   const [articleSummary, setArticleSummary] = useState("");
+  const [frameworks, setFrameworks] = useState([]);
+  const [premiumIncrease, setPremiumIncrease] = useState(48);
 
   // Ref for PDF
   const reportRef = useRef();
@@ -69,91 +120,131 @@ const InsuranceClimateDashboard = () => {
   const fetchDashboardData = async () => {
     setIsLoading(true);
     setError(null);
-
-    // 1) Risk scores
+    
     try {
-      const res = await fetch(`${API_BASE_URL}/domains/risk-scores`);
-      if (!res.ok) throw new Error();
-      const data = await res.json();
-      setDomainRiskScores(data);
-      generateTrendData(data);
-    } catch {
-      // fallback...
-      setDomainRiskScores([
-        { domain: "property", risk_score: 8.7, contributing_factors: ["Floods","Wildfires","Hurricanes"], trend: "increasing" },
-        { domain: "casualty", risk_score: 6.5, contributing_factors: ["Liability claims","Disclosure failures"], trend: "stable" },
-        { domain: "life", risk_score: 4.2, contributing_factors: ["Heat-related illness","Climate mortality"], trend: "stable" },
-        { domain: "health", risk_score: 5.8, contributing_factors: ["Vector-borne diseases","Heat stress"], trend: "increasing" },
-        { domain: "reinsurance", risk_score: 7.9, contributing_factors: ["Capacity constraints","Pricing increases"], trend: "increasing" },
-      ]);
-      generateTrendData(domainRiskScores);
-    }
-
-    // 2) Recent articles
-    try {
-      const res = await fetch(`${API_BASE_URL}/articles?limit=4&min_relevance=8`);
-      if (!res.ok) throw new Error();
-      setRecentArticles(await res.json());
-    } catch {
-      setRecentArticles([
-        { id: "1", title: "TNFD Framework Adoption Accelerating", source: "TNFD", date: "2024-04-15", total_relevance: 17 },
-        { id: "2", title: "Extreme Weather Driving Property Insurance Market Hardening", source: "Insurance Journal", date: "2024-04-05", total_relevance: 19 },
-        { id: "3", title: "New Study Shows Coastal Flood Risk Underestimated", source: "Climate Home News", date: "2024-03-22", total_relevance: 19 },
-        { id: "4", title: "Climate Liability Claims Rising as Legal Precedents Emerge", source: "Insurance Business Magazine", date: "2024-04-01", total_relevance: 15 }
-      ]);
-    }
-
-    // 3) Stats (risk factors & source distribution)
-    try {
-      const res = await fetch(`${API_BASE_URL}/dashboard/stats`);
-      if (!res.ok) throw new Error();
-      const stats = await res.json();
-      setRiskFactors(
-        Object.entries(stats.risk_factor_frequency)
-          .map(([name, value]) => ({ name, value }))
-          .sort((a, b) => b.value - a.value)
-          .slice(0, 8)
-      );
-      setSourceDistribution(
-        Object.entries(stats.source_distribution)
-          .map(([name, value]) => ({ name, value }))
-          .sort((a, b) => b.value - a.value)
-          .slice(0, 6)
-      );
-    } catch {
-      setRiskFactors([
-        { name: "Floods", value: 23 },
-        { name: "Wildfires", value: 18 },
-        { name: "Hurricanes", value: 15 },
-        { name: "Regulatory compliance", value: 14 },
-        { name: "Liability litigation", value: 12 },
-        { name: "Sea level rise", value: 10 },
-        { name: "Disclosure requirements", value: 9 },
-        { name: "Transition risks", value: 8 }
-      ]);
-      setSourceDistribution([
-        { name: "Insurance Journal", value: 28 },
-        { name: "TNFD", value: 23 },
-        { name: "Climate Home News", value: 18 },
-        { name: "UNFCCC", value: 15 },
-        { name: "Insurance Business Magazine", value: 14 },
-        { name: "Other", value: 12 }
-      ]);
-    }
-
-    // 4) Latest report
-    try {
-      const res = await fetch(`${API_BASE_URL}/reports/latest`);
-      if (res.ok) {
-        setReportData(await res.json());
-      } else {
-        setReportData({ executive_summary: "No report available yet.", key_developments: "", insurance_domain_impacts: "", recommended_actions: "" });
+      // 1) Risk scores
+      try {
+        const res = await fetch(`${API_BASE_URL}/domains/risk-scores`);
+        if (!res.ok) throw new Error();
+        const data = await res.json();
+        setDomainRiskScores(data);
+        generateTrendData(data);
+      } catch (error) {
+        console.error("Error fetching risk scores:", error);
+        // fallback...
+        const fallbackData = [
+          { domain: "property", risk_score: 8.7, contributing_factors: ["Floods","Wildfires","Hurricanes"], trend: "increasing" },
+          { domain: "casualty", risk_score: 6.5, contributing_factors: ["Liability claims","Disclosure failures"], trend: "stable" },
+          { domain: "life", risk_score: 4.2, contributing_factors: ["Heat-related illness","Climate mortality"], trend: "stable" },
+          { domain: "health", risk_score: 5.8, contributing_factors: ["Vector-borne diseases","Heat stress"], trend: "increasing" },
+          { domain: "reinsurance", risk_score: 7.9, contributing_factors: ["Capacity constraints","Pricing increases"], trend: "increasing" },
+        ];
+        setDomainRiskScores(fallbackData);
+        generateTrendData(fallbackData);
       }
-    } catch {
-      setReportData({ executive_summary: "Error fetching report.", key_developments: "", insurance_domain_impacts: "", recommended_actions: "" });
+  
+      // 2) Recent articles
+      try {
+        const res = await fetch(`${API_BASE_URL}/articles?limit=4&min_relevance=8`);
+        if (!res.ok) throw new Error();
+        setRecentArticles(await res.json());
+      } catch (error) {
+        console.error("Error fetching recent articles:", error);
+        setRecentArticles([
+          { id: "1", title: "TNFD Framework Adoption Accelerating", source: "TNFD", date: "2024-04-15", total_relevance: 17 },
+          { id: "2", title: "Extreme Weather Driving Property Insurance Market Hardening", source: "Insurance Journal", date: "2024-04-05", total_relevance: 19 },
+          { id: "3", title: "New Study Shows Coastal Flood Risk Underestimated", source: "Climate Home News", date: "2024-03-22", total_relevance: 19 },
+          { id: "4", title: "Climate Liability Claims Rising as Legal Precedents Emerge", source: "Insurance Business Magazine", date: "2024-04-01", total_relevance: 15 }
+        ]);
+      }
+  
+      // 3) Stats (risk factors & source distribution)
+      try {
+        const res = await fetch(`${API_BASE_URL}/dashboard/stats`);
+        if (!res.ok) throw new Error();
+        const stats = await res.json();
+        setRiskFactors(
+          Object.entries(stats.risk_factor_frequency)
+            .map(([name, value]) => ({ name, value }))
+            .sort((a, b) => b.value - a.value)
+            .slice(0, 8)
+        );
+        setSourceDistribution(
+          Object.entries(stats.source_distribution)
+            .map(([name, value]) => ({ name, value }))
+            .sort((a, b) => b.value - a.value)
+            .slice(0, 6)
+        );
+      } catch (error) {
+        console.error("Error fetching stats:", error);
+        setRiskFactors([
+          { name: "Floods", value: 23 },
+          { name: "Wildfires", value: 18 },
+          { name: "Hurricanes", value: 15 },
+          { name: "Regulatory compliance", value: 14 },
+          { name: "Liability litigation", value: 12 },
+          { name: "Sea level rise", value: 10 },
+          { name: "Disclosure requirements", value: 9 },
+          { name: "Transition risks", value: 8 }
+        ]);
+        setSourceDistribution([
+          { name: "Insurance Journal", value: 28 },
+          { name: "TNFD", value: 23 },
+          { name: "Climate Home News", value: 18 },
+          { name: "UNFCCC", value: 15 },
+          { name: "Insurance Business Magazine", value: 14 },
+          { name: "Other", value: 12 }
+        ]);
+      }
+  
+      // 4) Latest report
+      try {
+        const res = await fetch(`${API_BASE_URL}/reports/latest`);
+        if (res.ok) {
+          setReportData(await res.json());
+        } else {
+          setReportData({ executive_summary: "No report available yet.", key_developments: "", insurance_domain_impacts: "", recommended_actions: "" });
+        }
+      } catch (error) {
+        console.error("Error fetching report:", error);
+        setReportData({ executive_summary: "Error fetching report.", key_developments: "", insurance_domain_impacts: "", recommended_actions: "" });
+      }
+  
+      // 5) Frameworks data
+      try {
+        await fetchFrameworksData();
+      } catch (error) {
+        console.error("Error in fetchFrameworksData:", error);
+        // Set fallback frameworks data
+        setFrameworks([
+          { id: 1, name: "TCFD", status: "established" },
+          { id: 2, name: "TNFD", status: "emerging" },
+          { id: 3, name: "EU Taxonomy", status: "established" },
+          { id: 4, name: "NAIC Climate Risk Disclosure", status: "emerging" },
+          { id: 5, name: "ISSB Standards", status: "proposed" },
+          { id: 6, name: "CDSB Framework", status: "established" },
+          { id: 7, name: "NGFS Scenarios", status: "emerging" }
+        ]);
+      }
+  
+      // 6) Premium data
+      try {
+        await fetchPremiumData();
+      } catch (error) {
+        console.error("Error in fetchPremiumData:", error);
+        // Set fallback premium increase
+        setPremiumIncrease(48);
+      }
+      
+    } catch (mainError) {
+      // This catches any errors not caught by the inner try-catch blocks
+      console.error("Main error in fetchDashboardData:", mainError);
+      setError("Failed to load dashboard data. Please try again.");
+    } finally {
+      // Always set loading to false, regardless of success or failure
+      console.log("Setting isLoading to false");
+      setIsLoading(false);
     }
-
-    setIsLoading(false);
   };
 
   // Trend chart data
@@ -309,7 +400,7 @@ const InsuranceClimateDashboard = () => {
       {/* Tabs */}
       <nav className="bg-white shadow-sm">
         <div className="container mx-auto px-4 flex space-x-4">
-        {['dashboard','reports','articles','domains','search','map'].map(tab => (
+        {['dashboard','reports','articles','domains','search','map', 'regulatory', 'underwriting'].map(tab => (
   <button
     key={tab}
     className={`px-4 py-3 font-medium ${
@@ -319,7 +410,11 @@ const InsuranceClimateDashboard = () => {
     }`}
     onClick={() => setActiveTab(tab)}
   >
-    {tab === 'search' ? 'Semantic Search' : tab === 'map' ? 'Map' : tab.charAt(0).toUpperCase() + tab.slice(1)}
+    {tab === 'search' ? 'Semantic Search' : 
+     tab === 'map' ? 'Risk Map' : 
+     tab === 'regulatory' ? 'Regulatory & ESG' : 
+     tab === 'underwriting' ? 'Underwriting & Coverage' : 
+     tab.charAt(0).toUpperCase() + tab.slice(1)}
   </button>
 ))}
 
@@ -491,7 +586,34 @@ const InsuranceClimateDashboard = () => {
                     </ResponsiveContainer>
                   </div>
                 </div>
+                <div className="bg-white p-4 rounded-lg shadow hover:shadow-md transition-shadow cursor-pointer" 
+                        onClick={() => setActiveTab('regulatory')}>
+                      <h3 className="text-lg font-semibold mb-2">Regulatory & ESG Intelligence</h3>
+                      <p className="text-gray-600 mb-3">
+                        Monitor regulatory frameworks, ESG impacts, and compliance requirements affecting insurance business lines.
+                      </p>
+                      <div className="flex justify-between items-center">
+                        <div className="bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs font-medium">
+                          {frameworks ? frameworks.length : '7'} Frameworks
+                        </div>
+                        <span className="text-blue-600 text-sm">View details →</span>
+                      </div>
+                    </div>
 
+                <div className="bg-white p-4 rounded-lg shadow hover:shadow-md transition-shadow cursor-pointer"
+                    onClick={() => setActiveTab('underwriting')}>
+                  <h3 className="text-lg font-semibold mb-2">Underwriting & Coverage Analysis</h3>
+                  <p className="text-gray-600 mb-3">
+                    Analyze premium trends, coverage gaps, and underwriting challenges related to climate risks.
+                  </p>
+                  <div className="flex justify-between items-center">
+                    <div className="bg-orange-100 text-orange-800 px-2 py-1 rounded-full text-xs font-medium">
+                      Property Premiums +{premiumIncrease || '48'}%
+                    </div>
+                    <span className="text-blue-600 text-sm">View details →</span>
+                  </div>
+                </div>
+             
                 {/* Recent Articles */}
                 <div className="bg-white rounded-lg shadow p-4">
                   <div className="flex justify-between items-center mb-4">
@@ -633,6 +755,19 @@ const InsuranceClimateDashboard = () => {
                   </button>
                 </div>
               </div>
+            )}
+          {activeTab === 'regulatory' && (
+            <div className="bg-white rounded-lg shadow p-4">
+              <h2 className="text-xl font-semibold mb-4">Regulatory & ESG Intelligence</h2>
+              <RegulatoryESGTracker />
+            </div>
+          )}
+
+          {activeTab === 'underwriting' && (
+            <div className="bg-white rounded-lg shadow p-4">
+              <h2 className="text-xl font-semibold mb-4">Underwriting Challenges & Coverage Analysis</h2>
+              <UnderwritingCoverageAnalysis />
+            </div>
             )}
 
             {activeTab === 'articles' && (
@@ -909,6 +1044,7 @@ const DomainSection = ({ domain, trendData, apiBaseUrl }) => {
   };
 
   return (
+    
     <div className="bg-white rounded-lg shadow overflow-hidden">
       <div className="px-6 py-4 bg-gray-50 border-b flex justify-between items-center">
         <h2 className="text-xl font-semibold capitalize">{domain.domain} Insurance</h2>
@@ -942,7 +1078,8 @@ const DomainSection = ({ domain, trendData, apiBaseUrl }) => {
             {domain.trend}
           </span>
         </div>
-      </div>
+      </div><div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+  
       <div className="p-6">
         {/* key factors, business implications, trend chart, related regs omitted for brevity */}
         <div className="mt-8 border-t pt-6">
@@ -971,7 +1108,7 @@ const DomainSection = ({ domain, trendData, apiBaseUrl }) => {
           )}
         </div>
       </div>
-    </div>
+    </div></div>
   );
 };
 
