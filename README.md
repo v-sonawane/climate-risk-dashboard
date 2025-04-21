@@ -2,7 +2,8 @@
 
 Polisure is a comprehensive climate risk intelligence platform built for underwriters, actuaries, and ESG teams alike. It combines regulatory tracking, real-time climate risk monitoring, property portfolio management, and AI-powered analytics to help insurers make data-driven decisions in an increasingly volatile climate landscape.
 
-![Polisure Dashboard](https://example.com/dashboard.png)
+#### Watch Product Walkthrough Here
+[![Polisure Walkthrough](https://img.youtube.com/vi/3brCJ7ISJUY/0.jpg)](https://youtu.be/3brCJ7ISJUY)
 
 ## Core Features
 
