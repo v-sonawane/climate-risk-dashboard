@@ -29,18 +29,27 @@ Polisure is a comprehensive climate risk intelligence platform built for underwr
 
 ## Dashboard Overview
 
+
+### Property Portfolio Dashboard
+#### Portfolio Optimization & Premium Recommendations
+![Portfolio Optimization & Premium Recommendations](assets/portfolio_and_premium.gif)
+#### Property Portfolio Addition & Property Valuation
+![Property Portfolio Addition & Property Valuation](assets/property_portfolio_and_evaluation.gif)
+#### Property Dashboard
+![Property Dashboard](assets/property_dashboard.gif)
+
+- Interactive property map with risk overlays
+- Individual property risk assessments
+- Portfolio-level risk concentration analysis
+- AI recommendations for portfolio optimization
+  
+
 ### Risk Intelligence Dashboard
 ![Risk Intelligence](https://example.com/risk-intelligence.png)
 - Global risk map with real-time hazard alerts
 - Domain-specific risk scores with contributing factors
 - Emerging risk trends with predictive analytics
 
-### Property Portfolio Dashboard
-![Property Portfolio](https://example.com/property-dashboard.png)
-- Interactive property map with risk overlays
-- Individual property risk assessments
-- Portfolio-level risk concentration analysis
-- AI recommendations for portfolio optimization
 
 ### Regulatory Tracking
 ![Regulatory Tracking](https://example.com/regulatory.png)
