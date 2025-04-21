@@ -2,7 +2,7 @@
 
 Polisure is a comprehensive climate risk intelligence platform built for underwriters, actuaries, and ESG teams alike. It combines regulatory tracking, real-time climate risk monitoring, property portfolio management, and AI-powered analytics to help insurers make data-driven decisions in an increasingly volatile climate landscape.
 
-#### Watch Product Walkthrough Here
+#### Watch Product Walkthrough Below
 [![Polisure Walkthrough](https://img.youtube.com/vi/3brCJ7ISJUY/0.jpg)](https://youtu.be/3brCJ7ISJUY)
 
 ## Core Features
@@ -13,10 +13,20 @@ Polisure is a comprehensive climate risk intelligence platform built for underwr
 - **Property Valuation**: Climate risk-adjusted property valuations with detailed factor analysis
 - **Premium Optimization**: Risk-based premium calculations with coverage recommendations
 
+### Property Portfolio Dashboard
+#### Portfolio Optimization & Premium Recommendations
+![Portfolio Optimization & Premium Recommendations](assets/portfolio_and_premium.gif)
+#### Property Portfolio Addition & Property Valuation
+![Property Portfolio Addition & Property Valuation](assets/property_portfolio_and_evaluation.gif)
+#### Property Dashboard
+![Property Dashboard](assets/property_dashboard.gif)
+
 ### Domain Risk Tracking & Analysis
 - **5-Domain Risk Scoring**: Real-time risk assessment across Property, Casualty, Life, Health, and Reinsurance domains
 - **Impact Assessment**: Quantitative and qualitative assessment of climate risks on insurance business lines
 - **Trend Analysis**: Visualize risk emergence and evolution across insurance domains
+
+![Dashboard Overview](assets/data_stats.gif)
 
 ### Regulatory Intelligence
 - **Regulatory Framework Monitoring**: Track emerging, established, and proposed regulatory frameworks
@@ -27,16 +37,6 @@ Polisure is a comprehensive climate risk intelligence platform built for underwr
 - **Automated Report Generation**: Regular intelligence reports based on latest climate and regulatory data
 - **Article Summarization**: AI-generated summaries of key articles and regulatory publications
 - **LLM-Powered Analysis**: Advanced language model analysis of risk implications and strategic recommendations
-
-## Demo
-
-### Property Portfolio Dashboard
-#### Portfolio Optimization & Premium Recommendations
-![Portfolio Optimization & Premium Recommendations](assets/portfolio_and_premium.gif)
-#### Property Portfolio Addition & Property Valuation
-![Property Portfolio Addition & Property Valuation](assets/property_portfolio_and_evaluation.gif)
-#### Property Dashboard
-![Property Dashboard](assets/property_dashboard.gif)
 
 
 ## Technical Architecture
