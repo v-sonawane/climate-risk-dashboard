@@ -15,5 +15,26 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
+    <script>
+      // Function to load Google Maps API
+      function loadGoogleMapsScript() {
+        const script = document.createElement('script');
+        script.src = "https://maps.googleapis.com/maps/api/js?key=YOUR_API_KEY&callback=initMap";
+        script.defer = true;
+        document.head.appendChild(script);
+      }
+      
+      // Initialize map (will be called automatically when Google Maps API loads)
+      function initMap() {
+        // This is just a placeholder - the React component will handle the actual map initialization
+        console.log("Google Maps API loaded");
+        
+        // Dispatch an event that our React components can listen for
+        window.dispatchEvent(new Event('google-maps-loaded'));
+      }
+      
+      // Load the script
+      loadGoogleMapsScript();
+    </script>
   </body>
 </html>
