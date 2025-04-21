@@ -16,6 +16,7 @@ import UnderwritingCoverageAnalysis from './Underwriting.jsx';
 import RegulatoryESGTracker from './RegulatoryESGTracker.jsx';
 import ClimateDataManagementPanel from './ClimateDataManagement';
 import EnterpriseReportSection from './Reports.jsx';
+import PropertyDashboard from './PropertyDashboard.jsx';
 
 // API base URL - change this to match your backend URL
 const API_BASE_URL = 'http://localhost:8000';
@@ -423,7 +424,7 @@ const InsuranceClimateDashboard = () => {
       {/* Tabs */}
       <nav className="bg-white shadow-sm">
         <div className="container mx-auto px-4 flex space-x-4">
-        {['dashboard','reports','articles','domains','search','map','regulatory','underwriting','data-management'].map(tab => (
+        {['dashboard','reports','articles','domains','search','map','regulatory','underwriting','data-management','property'].map(tab => (
   <button
     key={tab}
     className={`px-4 py-3 font-medium whitespace-nowrap ${
@@ -438,6 +439,7 @@ const InsuranceClimateDashboard = () => {
      tab === 'regulatory' ? 'Regulatory & ESG' : 
      tab === 'underwriting' ? 'Underwriting & Coverage' : 
      tab === 'data-management' ? 'AI Data Manager' :
+     tab === 'property' ? 'Property Dashboard' :
      tab.charAt(0).toUpperCase() + tab.slice(1)}
   </button>
 ))}
@@ -772,6 +774,13 @@ const InsuranceClimateDashboard = () => {
                 <RiskMap />
               </div>
             )}
+            {activeTab === 'property' && (
+              <div className="bg-white rounded-lg shadow p-4">
+                <h2 className="text-xl font-semibold mb-4">Property Dashboard</h2>
+                <PropertyDashboard />
+              </div>
+            )}
+          
 
           </>
         )}

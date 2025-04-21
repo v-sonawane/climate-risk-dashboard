@@ -115,10 +115,7 @@ export default function UnderwritingCoverageAnalysis() {
 
       {error && <div className="text-red-500">{error}</div>}
 
-      {/* Add this new condition for the enterprise dashboard */}
-      {activeTab === 'enterprise' && (
-        <PropertyDashboard />
-      )}
+      {/* *Add this new condition for the enterprise dashboard {activeTab === 'enterprise' && (  <PropertyDashboard /> )}*/}
 
       {/* Keep all your existing conditions */}
       {activeTab === 'tracked' && (

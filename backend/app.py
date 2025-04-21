@@ -4680,6 +4680,323 @@ def calculate_climate_risks(weather_data, flood_data):
             },
             "error": str(e)
         }
+class PropertyValuationRequest(BaseModel):
+    property_id: str
+    name: str
+    address: str
+    property_type: Optional[str] = None
+    year_built: Optional[int] = None
+    square_footage: Optional[int] = None
+    latitude: float
+    longitude: float
+    current_value: Optional[float] = None
+    notes: Optional[str] = None
+
+class ValuationFactor(BaseModel):
+    description: str
+    impact: float
+
+class PropertyValuationResponse(BaseModel):
+    property_id: str
+    baselineValue: float
+    adjustedValue: float
+    factors: List[ValuationFactor]
+    analysis: str
+
+# Portfolio Recommendation Models
+class PortfolioRequest(BaseModel):
+    properties: List[Dict[str, Any]]
+
+class PortfolioRecommendation(BaseModel):
+    type: str
+    title: str
+    description: str
+    riskImpact: str
+    financialImpact: str
+    propertyIds: List[str]
+    portfolioAnalysis: str
+
+class PortfolioResponse(BaseModel):
+    recommendations: List[PortfolioRecommendation]
+
+# Premium Optimization Models
+class PremiumRequest(BaseModel):
+    property_id: str
+    name: str
+    address: str
+    property_type: Optional[str] = None
+    year_built: Optional[int] = None
+    latitude: float
+    longitude: float
+    current_value: Optional[float] = None
+    current_premium: Optional[float] = None
+
+class RiskFactor(BaseModel):
+    name: str
+    impact: float
+
+class PremiumResponse(BaseModel):
+    property_id: str
+    standardPremium: float
+    recommendedPremium: float
+    riskFactors: List[RiskFactor]
+    coverageRecommendations: List[str]
+    analysis: str
+    riskScore: float
+    deductibleRecommendation: float
+    coverageLimit: float
+
+@app.post("/property-valuation", response_model=PropertyValuationResponse)
+async def generate_property_valuation(request: PropertyValuationRequest):
+    """Generate AI-powered property valuation that accounts for climate risks"""
+    try:
+        # Fetch climate risk data for the property location
+        climate_risk_url = f"/climate-risks/multi-hazard?lat={request.latitude}&lon={request.longitude}"
+        # In a real app, you would use httpx or similar to make this request
+        # Here we'll assume the data is already available
+        
+        # Create prompt for the LLM
+        system_prompt = """
+        You are an expert in real estate valuation and climate risk assessment. 
+        Analyze the provided property details and climate risk information to 
+        generate a risk-adjusted property valuation with detailed factors.
+        """
+        
+        human_prompt = f"""
+        Property Information:
+        - Name: {request.name}
+        - Address: {request.address}
+        - Type: {request.property_type or 'Residential'}
+        - Year Built: {request.year_built or 'Unknown'}
+        - Square Footage: {request.square_footage or 'Unknown'}
+        - Current Estimated Value: ${request.current_value or 'Unknown'}
+        - Location: Latitude {request.latitude}, Longitude {request.longitude}
+        - Notes: {request.notes or 'None'}
+        
+        Current climate risk assessment indicates this property has exposure to various hazards.
+        
+        Based on this information:
+        1. Estimate a baseline property value (without climate risk factors)
+        2. Calculate a risk-adjusted value considering climate hazards
+        3. Identify 3-5 specific factors affecting the valuation (with percentage impact)
+        4. Provide a brief analysis explaining the valuation adjustment
+        
+        Return ONLY valid JSON in this format:
+        {{
+          "property_id": "{request.property_id}",
+          "baselineValue": 500000,
+          "adjustedValue": 475000,
+          "factors": [
+            {{ "description": "Flood risk in the area", "impact": -5.2 }},
+            {{ "description": "Recent climate resilience improvements", "impact": 3.7 }}
+          ],
+          "analysis": "This property shows vulnerability to several climate hazards..."
+        }}
+        """
+        
+        # Call the LLM
+        messages = [
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=human_prompt)
+        ]
+        
+        llm_response = llm.invoke(messages)
+        
+        # Extract and parse JSON from LLM response
+        try:
+            # Look for JSON within the response
+            response_text = llm_response.content
+            
+            # Try to find JSON block if present
+            import re
+            json_match = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', response_text)
+            
+            if json_match:
+                result = json.loads(json_match.group(1).strip())
+            else:
+                # If no JSON block markers, try to parse the whole response
+                result = json.loads(response_text.strip())
+                
+            return PropertyValuationResponse(**result)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to parse AI response: {str(e)}")
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generating property valuation: {str(e)}")
+
+@app.post("/portfolio-recommendations", response_model=PortfolioResponse)
+async def generate_portfolio_recommendations(request: PortfolioRequest):
+    """Generate AI-powered portfolio optimization recommendations"""
+    try:
+        # Prepare the property data for analysis
+        properties_text = ""
+        for i, prop in enumerate(request.properties[:10]):  # Limit to 10 properties for context length
+            properties_text += f"""
+            Property {i+1}:
+            - Name: {prop.get('name', 'Unknown')}
+            - Address: {prop.get('address', 'Unknown')}
+            - Type: {prop.get('property_type', 'Residential')}
+            - Location: Lat {prop.get('latitude', 'Unknown')}, Lon {prop.get('longitude', 'Unknown')}
+            - Current Value: ${prop.get('current_value', 'Unknown')}
+            - ID: {prop.get('id', 'Unknown')}
+            """
+        
+        system_prompt = """
+        You are an expert in real estate portfolio management with special expertise in climate risk. 
+        Analyze the provided property portfolio and generate strategic recommendations to optimize 
+        the portfolio for climate resilience while maintaining financial performance.
+        """
+        
+        human_prompt = f"""
+        Portfolio Information:
+        {properties_text}
+        
+        Based on these properties, provide strategic recommendations to:
+        1. Reduce overall climate risk exposure
+        2. Optimize financial performance
+        3. Balance the portfolio across different risk categories
+        
+        For each recommendation, specify:
+        - Type (divest, invest, modify)
+        - Title (short, action-oriented)
+        - Description (detailed explanation)
+        - Risk impact (how it affects the portfolio's risk profile)
+        - Financial impact (potential costs and returns)
+        - Related property IDs (from the portfolio)
+        
+        Also provide an overall portfolio analysis.
+        
+        Return ONLY valid JSON in this format:
+        {{
+          "recommendations": [
+            {{
+              "type": "divest",
+              "title": "Divest high-risk coastal properties",
+              "description": "Consider selling properties in low-lying coastal areas...",
+              "riskImpact": "Would reduce overall portfolio risk score by 18%",
+              "financialImpact": "May result in a 5-7% reduction in short-term returns...",
+              "propertyIds": ["property_id_1", "property_id_2"],
+              "portfolioAnalysis": "Your portfolio of X properties shows..."
+            }},
+            ...
+          ]
+        }}
+        """
+        
+        # Call the LLM
+        messages = [
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=human_prompt)
+        ]
+        
+        llm_response = llm.invoke(messages)
+        
+        # Extract and parse JSON from LLM response
+        try:
+            # Look for JSON within the response
+            response_text = llm_response.content
+            
+            # Try to find JSON block if present
+            import re
+            json_match = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', response_text)
+            
+            if json_match:
+                result = json.loads(json_match.group(1).strip())
+            else:
+                # If no JSON block markers, try to parse the whole response
+                result = json.loads(response_text.strip())
+                
+            return result
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to parse AI response: {str(e)}")
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generating portfolio recommendations: {str(e)}")
+
+@app.post("/premium-recommendation", response_model=PremiumResponse)
+async def generate_premium_recommendation(request: PremiumRequest):
+    """Generate AI-powered insurance premium recommendation"""
+    try:
+        # Fetch climate risk data for the property location
+        climate_risk_url = f"/climate-risks/multi-hazard?lat={request.latitude}&lon={request.longitude}"
+        # In a real app, you would use httpx or similar to make this request
+        
+        system_prompt = """
+        You are an expert in insurance underwriting and climate risk assessment. 
+        Analyze the provided property details and climate risk information to 
+        generate a risk-adjusted insurance premium recommendation with detailed factors.
+        """
+        
+        human_prompt = f"""
+        Property Information:
+        - Name: {request.name}
+        - Address: {request.address}
+        - Type: {request.property_type or 'Residential'}
+        - Year Built: {request.year_built or 'Unknown'}
+        - Current Value: ${request.current_value or 'Unknown'}
+        - Current Premium: ${request.current_premium or 'Unknown'}
+        - Location: Latitude {request.latitude}, Longitude {request.longitude}
+        
+        Current climate risk assessment indicates this property has exposure to various hazards.
+        
+        Based on this information:
+        1. Estimate a standard market premium (without specific risk factors)
+        2. Calculate a risk-adjusted premium considering climate hazards
+        3. Identify 3-5 specific risk factors affecting the premium (with percentage impact)
+        4. Provide 2-3 coverage recommendations
+        5. Suggest appropriate deductible and coverage limits
+        6. Assign an overall risk score (1-10)
+        7. Provide a brief analysis explaining the premium adjustment
+        
+        Return ONLY valid JSON in this format:
+        {{
+          "property_id": "{request.property_id}",
+          "standardPremium": 2500,
+          "recommendedPremium": 2750,
+          "riskFactors": [
+            {{ "name": "Flood zone proximity", "impact": 12.5 }},
+            {{ "name": "Building construction type", "impact": -7.3 }}
+          ],
+          "coverageRecommendations": [
+            "Increase flood coverage limit due to elevated risk",
+            "Add extended replacement cost endorsement"
+          ],
+          "analysis": "Based on climate risk assessment...",
+          "riskScore": 6.5,
+          "deductibleRecommendation": 2500,
+          "coverageLimit": 500000
+        }}
+        """
+        
+        # Call the LLM
+        messages = [
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=human_prompt)
+        ]
+        
+        llm_response = llm.invoke(messages)
+        
+        # Extract and parse JSON from LLM response
+        try:
+            # Look for JSON within the response
+            response_text = llm_response.content
+            
+            # Try to find JSON block if present
+            import re
+            json_match = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', response_text)
+            
+            if json_match:
+                result = json.loads(json_match.group(1).strip())
+            else:
+                # If no JSON block markers, try to parse the whole response
+                result = json.loads(response_text.strip())
+                
+            return PremiumResponse(**result)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to parse AI response: {str(e)}")
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generating premium recommendation: {str(e)}")
 
 # Run the application
 if __name__ == "__main__":
