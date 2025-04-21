@@ -1,95 +1,126 @@
+# Polisure - Smarter Underwriting for a Changing World
 
----
+Polisure is a comprehensive climate risk intelligence platform built for underwriters, actuaries, and ESG teams alike. It combines regulatory tracking, real-time climate risk monitoring, property portfolio management, and AI-powered analytics to help insurers make data-driven decisions in an increasingly volatile climate landscape.
 
-## 🧠 **Project: InsureSmart – AI-Powered Climate Risk Intelligence for Insurance**
+![Polisure Dashboard](https://example.com/dashboard.png)
 
-### 🌪️ Real-Time Climate-Aware Underwriting. For All Lines of Insurance.
+## Core Features
 
----
+### Domain Risk Tracking & Analysis
+- **5-Domain Risk Scoring**: Real-time risk assessment across Property, Casualty, Life, Health, and Reinsurance domains
+- **Impact Assessment**: Quantitative and qualitative assessment of climate risks on insurance business lines
+- **Trend Analysis**: Visualize risk emergence and evolution across insurance domains
 
-## 🎯 Problem
+### Regulatory Intelligence
+- **Regulatory Framework Monitoring**: Track emerging, established, and proposed regulatory frameworks
+- **Compliance Readiness**: Stay ahead of regulatory changes with impact analysis for your business
+- **Geographic Coverage**: Global, regional, and local regulatory tracking with relevance scoring
 
-Climate volatility, evolving ESG mandates, and shifting regulatory landscapes are rapidly reshaping insurance underwriting. Traditional tools are:
+### Property Portfolio Management
+- **Multi-Hazard Risk Analysis**: Comprehensive assessment of flood, wildfire, storm, wind, and drought risks
+- **Portfolio Optimization**: AI-powered recommendations to balance and strengthen your property portfolio
+- **Property Valuation**: Climate risk-adjusted property valuations with detailed factor analysis
+- **Premium Optimization**: Risk-based premium calculations with coverage recommendations
 
-- **Reactive**, not proactive  
-- **Siloed** by region or product line  
-- **Manual**, lacking AI-driven insights
+### AI-Powered Insights
+- **Automated Report Generation**: Regular intelligence reports based on latest climate and regulatory data
+- **Article Summarization**: AI-generated summaries of key articles and regulatory publications
+- **LLM-Powered Analysis**: Advanced language model analysis of risk implications and strategic recommendations
 
-Insurers need a unified way to assess risk **across all lines** of business—with climate and ESG built in.
+## Dashboard Overview
 
----
+### Risk Intelligence Dashboard
+![Risk Intelligence](https://example.com/risk-intelligence.png)
+- Global risk map with real-time hazard alerts
+- Domain-specific risk scores with contributing factors
+- Emerging risk trends with predictive analytics
 
-## 💡 Solution: InsureSmart
+### Property Portfolio Dashboard
+![Property Portfolio](https://example.com/property-dashboard.png)
+- Interactive property map with risk overlays
+- Individual property risk assessments
+- Portfolio-level risk concentration analysis
+- AI recommendations for portfolio optimization
 
-A next-generation **climate-aware underwriting dashboard**, designed to support all 5 core insurance verticals:
+### Regulatory Tracking
+![Regulatory Tracking](https://example.com/regulatory.png)
+- Framework status tracker (emerging/established)
+- Geographic impact visualization
+- Timeline of implementation dates
+- Relevance scoring for your business lines
 
-### 🔹 1. Property  
-Track fire, flood, and storm hazards that drive catastrophic loss modeling.
+### Premium & Valuation Tools
+![Premium Calculation](https://example.com/premium-tools.png)
+- Risk-adjusted premium calculator
+- Property valuation tool with climate risk factors
+- Coverage gap analysis
+- Deductible and coverage limit recommendations
 
-### 🔹 2. Casualty  
-Understand liability shifts linked to ESG regulations and supply chain events.
+## Technical Architecture
 
-### 🔹 3. Life  
-Monitor temperature, drought, and long-term climate trends impacting actuarial models.
+Polisure leverages a modern tech stack:
 
-### 🔹 4. Health  
-Track urban heat islands, air quality, and hazard hotspots affecting population risk.
+- **Backend**: FastAPI, Langgraph and Claude AI with async processing for real-time data ingestion
+- **Frontend**: React with Tailwind CSS for a responsive, data-rich interface
+- **Geospatial**: Integrated climate risk APIs and interactive mapping
+- **Data Sources**: Continuous scraping of climate news, regulatory publications, and hazard data
 
-### 🔹 5. Reinsurance  
-Provide reinsurers with AI-generated, evidence-backed summaries of aggregate risk and ESG exposure by region and domain.
+## Getting Started
 
----
+### Installation
 
-## ⚙️ Platform Highlights
+```bash
+# Clone the repository
+git clone https://github.com/your-org/polisure.git
+cd polisure
 
-### 🧠 AI-Generated Underwriting Challenges  
-- Extracted from global ESG disclosures, climate reports, and news  
-- Sorted by hazard type, region, and impact level  
-- Ready-to-consume insights for UWs, actuaries, and portfolio analysts  
+# Backend setup
+cd backend
+pip install -r requirements.txt
+python -m app
 
-### 📊 Real-Time Coverage Gap & Risk Visualization  
-- Dynamic bar and line charts per domain (property, health, etc.)  
-- Drill into top drivers by hazard type and geography  
-- Identify underserved markets and model blind spots  
+# Frontend setup
+cd polisure
+npm install
+npm run dev
+```
 
-### 🌍 ESG Framework Intelligence  
-- 50+ global frameworks tracked (TNFD, SFDR, SEC climate rule)  
-- Filter by status (emerging/established/proposed), region, and impact  
-- Export-ready for compliance, risk, and sustainability teams  
+### Configuration
 
-### 📄 Instant Reports & Regulatory Briefs  
-- Generate PDF summaries with branded headers  
-- Schedule weekly/monthly rollups for executive teams  
-- All charts and insights backed by live data
+1. Copy `.env.example` to `.env` and fill in required API keys
+2. Configure data sources in `config/data_sources.json`
+3. Set up scheduled tasks in `config/scheduler.json`
 
----
+## Use Cases
 
-## 🔧 Tech Stack
+### Insurance Underwriting
+- Accurate risk-adjusted premium calculation
+- Multi-hazard climate risk assessment
+- Property-specific coverage recommendations
 
-| Layer | Tech |
-|-------|------|
-| **Frontend** | React, Recharts, Tailwind|
-| **Backend** | FastAPI, MongoDB, APScheduler |
-| **LLM Pipeline** | LangChain + Claude (Anthropic), OpenAI fallback |
-| **Deployment** | Dockerized, cloud-ready |
+### Portfolio Management
+- Risk concentration identification
+- Strategic portfolio balancing
+- Risk-adjusted property valuation
+
+### Regulatory Compliance
+- Stay ahead of emerging frameworks
+- Understand implementation timelines
+- Assess business impact of regulatory changes
+
+### Strategic Planning
+- Climate risk trend forecasting
+- Geographic risk exposure analysis
+- Competitive positioning in changing markets
 
 
-## 👥 Ideal Users
 
-- Chief Underwriting Officers  
-- Risk and Actuarial Analysts  
-- ESG & Compliance Teams  
-- Reinsurance Portfolio Managers  
-- Product & Pricing Actuaries
 
----
+## Contact
 
-## ✅ What’s Next
-
-- Add authenticated user roles (e.g. Broker vs Reinsurer)  
-- API integrations with Guidewire, Duck Creek  
-- Premium leakage analytics  
-- Generative ESG disclosure authoring for compliance teams  
+For more information, support, or partnership inquiries:
+- Email: gpteehee@gmail.com
+- Website: [LinkedIn](https://www.linkedin.com/in/vaishnavisonawane/)
 
 ---
 
