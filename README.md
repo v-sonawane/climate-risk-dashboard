@@ -48,35 +48,6 @@ Polisure leverages a modern tech stack:
 - **Geospatial**: Integrated climate risk APIs and interactive mapping
 - **Data Sources**: Continuous scraping of climate news, regulatory publications, and hazard data
 
-## Getting Started
-
-### Installation
-
-```bash
-# Clone the repository
-git clone https://github.com/your-org/polisure.git
-cd polisure
-
-# Backend setup
-cd backend
-pip install -r requirements.txt
-python -m app
-
-# Frontend setup
-cd polisure
-npm install
-npm run dev
-```
-
-### Configuration
-
-1. Copy `.env.example` to `.env` and fill in required API keys - Anthropic
-2. Run mongodb docker image 
-
-
-
-
-
 ## Contact
 
 For more information, support, or partnership inquiries:
